@@ -53,6 +53,8 @@ namespace Resphinx.Maze
 
         public Visibility[] visibility;
         public List<MazeCell> visiblePair;
+
+        public Vector2Int[] around = new Vector2Int[8];
         //    Vector3[] corners = new Vector3[4];
 
         public MazeCell(int x, int y, int z)
@@ -61,13 +63,15 @@ namespace Resphinx.Maze
             this.y = y;
             this.z = z;
             index = MazeMap.maze.cols * y + x;
-             ijk = new Vector3Int(x, y, z);
+            ijk = new Vector3Int(x, y, z);
             for (int i = 0; i < 2; i++)
                 for (int j = 0; j < 2; j++)
                 {
                     connection[i, j] = Connection.Pending;
                     opening[i, j] = Vector2.up;
-                    allowPass[i,j] = true;
+                    allowPass[i, j] = true;
+                    around[j * 2 + i] = i == j ? new Vector2Int(x, y) : new Vector2Int(x + i, y + j);
+                    around[j * 2 + i + 4] = new Vector2Int(x + i, y + j);
                 }
             //        xy = MazeManager.maze.size * new Vector2(x, y);
             position = MazeMap.maze.size * new Vector3(x, 0, y) + MazeMap.maze.height * new Vector3(0, z, 0);
@@ -388,7 +392,7 @@ namespace Resphinx.Maze
                 if (p.x < position.x)
                 {
                     varDebug = 10;
-                    if (neighbors[0, 0] != null && allowPass[0,0])
+                    if (neighbors[0, 0] != null && allowPass[0, 0])
                     {
                         varDebug = 11;
                         if (q > opening[0, 0].x && q < opening[0, 0].y)
@@ -477,7 +481,7 @@ namespace Resphinx.Maze
             return r;
         }
         public void EnterCell(bool checkShape)
-        {          
+        {
             MazeMap.maze.vision.levels[z].Apply(this);
         }
         public void ReviveShape()

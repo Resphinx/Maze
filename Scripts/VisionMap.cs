@@ -78,13 +78,14 @@ namespace Resphinx.Maze
         public void AddItem(GameObject g, int x, int y, VisionItemType type, bool alwaysVisible, int side = 0)
         {
             int[,] a = null;
+            int q = -1;
             switch (type)
             {
                 case VisionItemType.Floor: floor[x, y] = all.Count; all.Add(g); break;
                 case VisionItemType.Column: col[x, y] = all.Count; all.Add(g); break;
-                case VisionItemType.Opaque: a = side % 2 == 0 ? wallV : wallH; break;
-                case VisionItemType.Open: a = side % 2 == 0 ? openV : openH; break;
-                case VisionItemType.Transparent: a = side % 2 == 0 ? seeV : seeH; break;
+                case VisionItemType.Opaque: a = side % 2 == 0 ? wallV : wallH; q = 1; break;
+                case VisionItemType.Open: a = side % 2 == 0 ? openV : openH; q = 0; break;
+                case VisionItemType.Transparent: a = side % 2 == 0 ? seeV : seeH; q = 2; break;
             }
             if (a != null)
             {
@@ -98,18 +99,20 @@ namespace Resphinx.Maze
         /// <summary>
         /// Generates the vision map for a level
         /// </summary>
-        public void Vision()
+        public void Vision(bool raycast, int growOffset = 0)
         {
-            List<int> show = new List<int>(), hide = new List<int>();
-            //   int k = 0;
-            //     Vision(maze.cells[7, 7, 0]);
             for (int j = 0; j < maze.rows; j++)
                 for (int i = 0; i < maze.cols; i++)
                 {
                     VisionMap.currentCellIndex = j * maze.cols + i;
-                    if (maze.cells[i, j, level].situation != PairSituation.Undefined && maze.cells[i, j, level].situation != PairSituation.Void) Vision(maze.cells[i, j, level]);
+                    if (maze.cells[i, j, level].situation != PairSituation.Undefined && maze.cells[i, j, level].situation != PairSituation.Void)
+                    {
+                        if (raycast) VisionRayCast(maze.cells[i, j, level], growOffset);
+                        else VisionAround(maze.cells[i, j, level], growOffset);
+                    }
                 }
         }
+
         /// <summary>
         /// The points on all sides from where rays are cast for vision mapping. 
         /// </summary>
@@ -155,6 +158,17 @@ namespace Resphinx.Maze
             }
             return vs;
         }
+        bool GrowVisible(Visibility[] current, int x, int y, int grow)
+        {
+            for (int i = x - grow; i <= x + grow; i++)
+                for (int j = y - grow; j <= y + grow; j++)
+                    if (x != i || y != j)
+                        if (i >= 0 && j >= 0 && i < maze.cols && j < maze.rows)
+                            if (floor[i, j] >= 0)
+                                if (current[floor[i, j]] == Visibility.Visible)
+                                    return true;
+            return false;
+        }
         bool FloorVisibility(MazeCell cell, int x, int y)
         {
             for (int i = 0; i < 4; i++)
@@ -174,62 +188,16 @@ namespace Resphinx.Maze
             }
             return false;
         }
-        bool ColumnVisibility(MazeCell cell, int x, int y)
-        {
-            for (int d = 0; d < 4; d++)
-            {
-                int i = d != 2 ? x : x - 1;
-                int j = d != 3 ? y : y - 1;
-                if (d % 2 == 0)
-                {
-                    if (i < 0 || i >= maze.cols || j < 0) continue;
-                    if (openH[i, j] >= 0)
-                        if (cell.visibility[openH[i, j]] != Visibility.Invisible) return true;
-                    if (wallH[i, j] >= 0)
-                        if (cell.visibility[wallH[i, j]] != Visibility.Invisible) return true;
-                }
-                else
-                {
-                    if (i < 0 || j >= maze.rows || j < 0) continue;
-                    if (openV[i, j] >= 0)
-                        if (cell.visibility[openV[i, j]] != Visibility.Invisible) return true;
-                    if (wallV[i, j] >= 0)
-                        if (cell.visibility[wallV[i, j]] != Visibility.Invisible) return true;
-                }
-            }
-            return false;
-        }
-        void Vis(MazeCell cell, int x, int y, bool vertical)
-        {
-            if (vertical)
-            {
-                if (openV[x, y] >= 0) cell.visibility[openV[x, y]] = Visibility.Visible;
-                else if (seeV[x, y] >= 0)
-                {
-                    cell.visibility[seeV[x, y]] = Visibility.Transparent;
-                    cell.visibility[wallV[x, y]] = Visibility.Opaque;
-                }
-                else if (wallV[x, y] >= 0) cell.visibility[wallV[x, y]] = Visibility.Visible;
-            }
-            else
-            {
-                if (openH[x, y] >= 0) cell.visibility[openH[x, y]] = Visibility.Visible;
-                else if (seeH[x, y] >= 0)
-                {
-                    cell.visibility[seeH[x, y]] = Visibility.Transparent;
-                    cell.visibility[wallH[x, y]] = Visibility.Opaque;
-                }
-                else if (wallH[x, y] >= 0) cell.visibility[wallH[x, y]] = Visibility.Visible;
-            }
 
-        }
-        void Vision(MazeCell cell)
+    
+        void VisionRayCast(MazeCell cell, int growOffset = 0)
         {
             cell.visibility = new Visibility[all.Count];
             cell.visiblePair = new List<MazeCell>();
             for (int i = 0; i < cell.visibility.Length; i++) cell.visibility[i] = Visibility.Invisible;
 
             if (floor[cell.x, cell.y] >= 0) cell.visibility[floor[cell.x, cell.y]] = Visibility.Visible;
+
             if (cell.pair != null)
                 if (cell.pair.z != level)
                     cell.visiblePair.Add(cell.pair);
@@ -239,11 +207,6 @@ namespace Resphinx.Maze
                 int y = d == 1 ? cell.y + 1 : cell.y;
                 if (d % 2 == 0) if (seeV[x, y] < 0 && openV[x, y] < 0) continue;
                 if (d % 2 == 1) if (seeH[x, y] < 0 && openH[x, y] < 0) continue;
-                // inside cell
-                for (int ci = 0; ci < 2; ci++)
-                    for (int cj = 0; cj < 2; cj++)
-                        if (col[ci + cell.x, cj + cell.y] >= 0)
-                            cell.visibility[col[ci + cell.x, cj + cell.y]] = Visibility.Visible;
 
                 for (int i = 0; i < PointCount; i++)
                 {
@@ -251,40 +214,82 @@ namespace Resphinx.Maze
                     for (int j = 0; j <= AngleStepCount; j++)
                         Vision(cell, x, y, d, p, rays[d][j]);
                 }
-                Vis(cell, cell.x, cell.y, true);
-                Vis(cell, cell.x + 1, cell.y, true);
-                Vis(cell, cell.x, cell.y, false);
-                Vis(cell, cell.x, cell.y + 1, false);
-
             }
-            for (int i = 0; i <= maze.cols; i++)
-                for (int j = 0; j <= maze.rows; j++)
-                {
-                    if (i < maze.cols && j < maze.rows)
-                        // 
-                        if (i != cell.x || j != cell.y)
-                            if (FloorVisibility(cell, i, j))
-                            {
-                                if (floor[i, j] >= 0) cell.visibility[floor[i, j]] = Visibility.Visible;
-                                if (maze.cells[i, j, level].pair != null)
-                                    if (maze.cells[i, j, level].pair.z != level) cell.visiblePair.Add(maze.cells[i, j, level].pair);
-                            }
-                    if (col[i, j] >= 0)
-                        if (ColumnVisibility(cell, i, j)) cell.visibility[col[i, j]] = Visibility.Visible;
-                }
+            Vis(cell, cell);
+            for (int i = 0; i < maze.cols; i++)
+                for (int j = 0; j < maze.rows; j++)
+                    if (i != cell.x || j != cell.y)
+                        if (FloorVisibility(cell, i, j))
+                        {
+                            if (floor[i, j] >= 0) cell.visibility[floor[i, j]] = Visibility.Visible;
+                            if (maze.cells[i, j, level].pair != null)
+                                if (maze.cells[i, j, level].pair.z != level) cell.visiblePair.Add(maze.cells[i, j, level].pair);
+                        }
+
             for (int i = 0; i < all.Count; i++)
                 if (alwaysVisible[i])
                     cell.visibility[i] = Visibility.Visible;
 
-            int av = 0, tvx = 0;
-            for (int i = 0; i <= maze.cols; i++)
-                for (int j = 0; j <= maze.cols; j++)
+          
+            Visibility[] current = new Visibility[all.Count];
+            cell.visibility.CopyTo(current, 0);
+            bool vis;
+            for (int i = 0; i < maze.cols; i++)
+                for (int j = 0; j < maze.rows; j++)
                 {
-                    if (j < maze.rows) if (seeV[i, j] >= 0) tvx++;
-                    if (i < maze.cols) if (seeH[i, j] >= 0) tvx++;
+                    int fi = floor[i, j];
+                    if (fi >= 0)
+                    {
+                        vis = current[fi] == Visibility.Visible;
+                        if (!vis)
+                            if (vis = GrowVisible(current, i, j, growOffset))
+                                cell.visibility[fi] = Visibility.Visible;
+                        if (vis)                            Vis(cell, MazeMap.maze.cells[i, j, level]);
+
+                    }
                 }
-            for (int i = 0; i < all.Count; i++)
-                if (cell.visibility[i] == Visibility.Transparent) av++;
+        }
+        void VisionAround(MazeCell cell, int growOffset = 0)
+        {
+            cell.visibility = new Visibility[all.Count];
+            cell.visiblePair = new List<MazeCell>();
+            for (int i = 0; i < cell.visibility.Length; i++) cell.visibility[i] = Visibility.Invisible;
+
+            //   if (floor[cell.x, cell.y] >= 0) cell.visibility[floor[cell.x, cell.y]] = Visibility.Visible;
+            //  if (cell.pair != null) if (cell.pair.z != level) cell.visiblePair.Add(cell.pair);
+
+            for (int i = cell.x - growOffset; i <= cell.x + growOffset; i++)
+                for (int j = cell.y - growOffset; j <= cell.y + growOffset; j++)
+                {
+                    if (i < maze.cols && j < maze.rows && i >= 0 && j >= 0)
+                    {
+                        if (floor[i, j] >= 0) cell.visibility[floor[i, j]] = Visibility.Visible;
+                        Vis(cell, MazeMap.maze.cells[i, j, level]);
+                    }
+                }
+        }
+        bool Vis(MazeCell cell, int i, int j, int[,] open, int[,] wall, int[,] see)
+        {
+            if (open[i, j] >= 0) cell.visibility[open[i, j]] = Visibility.Visible;
+            if (see[i, j] >= 0)
+            {
+                cell.visibility[see[i, j]] = Visibility.Transparent;
+                cell.visibility[wall[i, j]] = Visibility.Opaque;
+            }
+            else if (wall[i, j] >= 0) { cell.visibility[wall[i, j]] = Visibility.Visible; return true; }
+            return false;
+        }
+        void Vis(MazeCell cell, MazeCell mc)
+        {
+             for (int m = 0; m < 4; m++)
+            {
+                Vector2Int v = mc.around[m + 4];
+                if (col[v.x, v.y] >= 0) cell.visibility[col[v.x, v.y]] = Visibility.Visible;
+                v = mc.around[m];
+                if (m % 2 == 0) Vis(cell, v.x, v.y, openH, wallH, seeH);
+                else Vis(cell, v.x, v.y, openV, wallV, seeV);
+            }
+
         }
         void Vision(MazeCell cell, int x, int y, int d, Vector2 p, Vector2 ray)
         {
@@ -296,7 +301,7 @@ namespace Resphinx.Maze
             int dx = ray.x < 0 ? -1 : 1, dy = ray.y < 0 ? -1 : 1;
             float m, n, m0, m1, n0, n1;
             bool vertical = d % 2 == 0;
-       
+
             while (true)
             {
                 if (ray.x != 0 && ray.y != 0)
@@ -306,7 +311,6 @@ namespace Resphinx.Maze
                     n0 = (nextY - p.y) / ray.y;
                     n1 = ((nextY + dy) - p.y) / ray.y;
 
-                    //    if (m0 < lastM || n0 < lastM) Debug.Log("apsd " + x + "," + y + " " + m0 + "," + n0 + "," + lastM);
                     if (m0 > lastM + 0.01) { m = m0; potX = nextX; } else { m = m1; potX = nextX + dx; }
                     if (n0 > lastM + 0.01) { n = n0; potY = nextY; } else { n = n1; potY = nextY + dy; }
                     if (m < n)
@@ -316,7 +320,7 @@ namespace Resphinx.Maze
                         if (!vertical && ray.y < 0) j--;
                         vertical = true;
                         lastM = m;
-                      }
+                    }
                     else
                     {
                         nextY += dy;
@@ -324,7 +328,7 @@ namespace Resphinx.Maze
                         if (vertical && ray.x < 0) i--;
                         vertical = false;
                         lastM = n;
-                     }
+                    }
                 }
                 else if (ray.x == 0)
                 {
@@ -335,35 +339,18 @@ namespace Resphinx.Maze
                 {
                     i += dx;
                     vertical = true;
-                 }
-
+                }
+                bool breakLoop;
                 if (vertical && (i < 0 || i > maze.cols || j < 0 || j >= maze.rows)) break;
                 else if (!vertical && (i < 0 || i >= maze.cols || j < 0 || j > maze.rows)) break;
                 else
                 {
-                    if (vertical)
-                    {
-                        if (openV[i, j] >= 0) cell.visibility[openV[i, j]] = Visibility.Visible;
-                        else if (seeV[i, j] >= 0)
-                        {
-                            cell.visibility[seeV[i, j]] = Visibility.Transparent;
-                            cell.visibility[wallV[i, j]] = Visibility.Opaque;
-                        }
-                        else if (wallV[i, j] >= 0) { cell.visibility[wallV[i, j]] = Visibility.Visible; break; }
-                    }
-                    else
-                    {
-                        if (openH[i, j] >= 0) cell.visibility[openH[i, j]] = Visibility.Visible;
-                        else if (seeH[i, j] >= 0)
-                        {
-                            cell.visibility[seeH[i, j]] = Visibility.Transparent;
-                            cell.visibility[wallH[i, j]] = Visibility.Opaque;
-                        }
-                        else if (wallH[i, j] >= 0) { cell.visibility[wallH[i, j]] = Visibility.Visible; break; }
-                    }
+                    if (vertical) breakLoop = Vis(cell, i, j, openV, wallV, seeV);
+                    else breakLoop = Vis(cell, i, j, openH, wallH, seeH);
+                    if (breakLoop) break;
                 }
             }
-            }
+        }
         public void Show(MazeCell cell, bool show)
         {
             bool active;
@@ -491,21 +478,19 @@ namespace Resphinx.Maze
                 }
             }
         }
-        public async void Vision()
+        public async void Vision(bool rayCast, int growOffset = 0)
         {
             Debug.Log("calculating in vision");
             await Task.Run(() =>
             {
                 lock (maze)
                 {
-                    //     int k = 0;
                     for (int k = 0; k < maze.levels; k++)
                     {
                         currentCalculatedLevel = k;
-                        levels[k].Vision();
+                        levels[k].Vision(rayCast, growOffset);
                     }
                     calculating = false;
-
                     Debug.Log("calculation op finished");
                 }
             });

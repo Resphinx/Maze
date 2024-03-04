@@ -9,6 +9,7 @@ namespace Resphinx.Maze
 {
     public enum MovementMode { Normal, Dash }
     public enum DashMode { Forward, Up, Down }
+    public enum VisionMode { RayCast, Around}
     public class Mazer : MonoBehaviour
     {
         public static Mazer Instance;
@@ -21,6 +22,8 @@ namespace Resphinx.Maze
         public CameraPosition cameraPosition = CameraPosition.Cell;
         public bool rotateCamera = false;
         public float relativeDistance = 2;
+        public VisionMode visionMode = VisionMode.Around;
+        public int visionOffset = 0;
 
         public GameObject prefabRoot, character;
         public ItemID[] mazeItems;
@@ -67,7 +70,7 @@ namespace Resphinx.Maze
             VisionMap.calculating = true;
 
             Application.targetFrameRate = 10;
-            maze.SetVision();
+            maze.SetVision(visionMode== VisionMode.RayCast, visionOffset);
         }
         public void VisionComplete()
         {

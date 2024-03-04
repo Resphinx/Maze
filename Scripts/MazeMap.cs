@@ -302,7 +302,11 @@ namespace Resphinx.Maze
                 else
                     i--;
             }
-        }
+            for (int m = 0; m < cols; m++)
+                for (int n = 0; n < rows; n++)
+                    if (cells[m, n, lev] == null)
+                        cells[m, n, lev] = MazeCell.Void(m, n, lev);
+            }
         void CreatePair(PrefabManager pm)
         {
             if (pm.modelCount.vertical != Vertical.None)
@@ -380,12 +384,12 @@ namespace Resphinx.Maze
                             {
                                 cr.sideIndex = mc.pairDirection;
                                 vision.AddItem(mc.floor = PrefabManager.RandomIndexed(mc, new List<PrefabManager>() { mc.floorPrefab }, cr, size), mc.x, mc.y, k, VisionItemType.Floor, cr.alwaysVisible);
-                                mc.floor.name += "fl-pair " + mc.x + "," + mc.y;
+                                mc.floor.name = "fl-pair " + mc.x + "," + mc.y;
                             }
                             else if (mc.situation == PairSituation.Normal)
                             {
                                 vision.AddItem(mc.floor = PrefabManager.RandomFloor(mc, floorPrefabs, cr, size), mc.x, mc.y, k, VisionItemType.Floor, cr.alwaysVisible);
-                                mc.floor.name += "fl-solo " + mc.x + "," + mc.y;
+                                mc.floor.name = "fl-solo " + mc.x + "," + mc.y;
                             }
                             // walls
                             for (side = 0; side < 4; side++)
@@ -492,10 +496,10 @@ namespace Resphinx.Maze
                             return;
                         }
         }
-        public void SetVision()
+        public void SetVision(bool rayCast, int growOffset = 0)
         {
             vision.SetLastStates();
-            vision.Vision();
+            vision.Vision(rayCast, growOffset);
         }
         public bool transparency = false;
         public void SetTransparency(bool t)
