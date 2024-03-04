@@ -1,5 +1,5 @@
 # Maze
-A simple multi-level realtime maze generator for Unity
+A simple multi-level realtime maze generator for Unity.
 
 You can either import it as the package or via the source code. To use the maze generator you need to do a few steps:
 1. Attach the component Mazer to an object on the scene. You can have  multiple mazes in a scene, however, all of them automatically become active once the game starts. You will need to pause or deactivate them via script (use pause or inGame fields of Mazer, or alternatively, change how Init is called in Mazer class).
