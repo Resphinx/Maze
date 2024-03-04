@@ -28,7 +28,7 @@ namespace Resphinx.Maze
         public string name;
         public GameObject root;
         public GameObject[] side;
-        public PrefabSettings modelCount;
+        public PrefabSettings settings;
         //     public int[] childIndex;
         public int allIndex;
         //    public int count = 1;
@@ -48,8 +48,8 @@ namespace Resphinx.Maze
                 root = Clone(handle),
             };
             pm.root.transform.SetParent(MazeMap.maze.prefabClone.transform);
-            pm.modelCount = pm.root.GetComponent<PrefabSettings>();
-            if (!addSides || (int)pm.modelCount.side > (int)Sides.Z_Negative || !pm.modelCount.rotatable)
+            pm.settings = pm.root.GetComponent<PrefabSettings>();
+            if (!addSides || (int)pm.settings.side > (int)Sides.Z_Negative || !pm.settings.rotatable)
             {
                 pm.side = new GameObject[] { pm.root };
                   pm.prefabType = PrefabType.Mono;
@@ -58,12 +58,12 @@ namespace Resphinx.Maze
             {
                 pm.side = new GameObject[4];
                 for (int i = 0; i < 4; i++)
-                    if ((int)pm.modelCount.side == i)
+                    if ((int)pm.settings.side == i)
                         pm.side[i] = pm.root.transform.GetChild(0).gameObject;
                     else
                     {
                         pm.side[i] = Clone(pm.root.transform.GetChild(0).gameObject, pm.root.transform);
-                        pm.side[i].transform.Rotate(Vector2.up, -90 * (i - (int)pm.modelCount.side), Space.World);
+                        pm.side[i].transform.Rotate(Vector2.up, -90 * (i - (int)pm.settings.side), Space.World);
                     }
                 pm.prefabType = PrefabType.Ordered;
             }
@@ -73,7 +73,7 @@ namespace Resphinx.Maze
         public static PrefabManager CreateRandom(string name, GameObject handle)
         {
             PrefabSettings mc = handle.GetComponent<PrefabSettings>();
-            if (mc.paired)
+            if (mc.Paired)
                 return CreateQuadro(name, handle);
             onCreation = true;
             PrefabManager pm = new PrefabManager()
@@ -82,7 +82,7 @@ namespace Resphinx.Maze
                 root = Clone(handle)
             };
             pm.root.transform.SetParent(MazeMap.maze.prefabClone.transform);
-            pm.modelCount = pm.root.GetComponent<PrefabSettings>();
+            pm.settings = pm.root.GetComponent<PrefabSettings>();
 
             pm.side = new GameObject[4];
             //    childIndex = new int[type == PrefabType.Mono ? 1 : 4];
@@ -107,7 +107,7 @@ namespace Resphinx.Maze
                 root = Clone(handle)
             };
             pm.root.transform.SetParent(MazeMap.maze.prefabClone.transform);
-            pm.modelCount = pm.root.GetComponent<PrefabSettings>();
+            pm.settings = pm.root.GetComponent<PrefabSettings>();
             pm.side = new GameObject[4];
             pm.prefabType = PrefabType.Ordered;
             int ncc = 0, cc = pm.root.transform.childCount;
@@ -150,7 +150,7 @@ namespace Resphinx.Maze
         {
             int total = 0;
             //Debug.Log("pools :" + list.Count);
-            for (int i = 0; i < list.Count; i++) { list[i].pool = total += list[i].modelCount == null ? 1 : list[i].modelCount.count; }
+            for (int i = 0; i < list.Count; i++) { list[i].pool = total += list[i].settings == null ? 1 : list[i].settings.count; }
             for (int i = 0; i < list.Count; i++) { list[i].pool /= total; }
 
         }
@@ -168,11 +168,11 @@ namespace Resphinx.Maze
             List<PrefabManager> l = new List<PrefabManager>();
             for (int i = 0; i < list.Count; i++)
             {
-                if (!list[i].modelCount.byCount)
-                    if (!sided || list[i].prefabType != PrefabType.Mono || (int)list[i].modelCount.side == cr.sideIndex)
-                        if (Check(cr.isEdge, list[i].modelCount.edge))
+                if (!list[i].settings.byCount)
+                    if (!sided || list[i].prefabType != PrefabType.Mono || (int)list[i].settings.side == cr.sideIndex)
+                        if (Check(cr.isEdge, list[i].settings.edge))
                             //                       if (Check(cr.isVoid, list[i].modelCount.voidType))
-                            if (Check(cr.isCorner, list[i].modelCount.corner))
+                            if (Check(cr.isCorner, list[i].settings.corner))
                                 l.Add(list[i]);
 
 
@@ -194,7 +194,7 @@ namespace Resphinx.Maze
         public static GameObject RandomNoIndex(Vector3 p, List<PrefabManager> list, CloneResult cr, float scale)
         {
             PrefabManager l = GetPool(list, cr, true);
-            cr.alwaysVisible = l.modelCount == null ? false : l.modelCount.alwaysVisible;
+            cr.alwaysVisible = l.settings == null ? false : l.settings.alwaysVisible;
             //        if (list[prefabIndex].name == "columns") Debug.Log("selected pool: " + prefabIndex + " " + list[prefabIndex].side[0].name);
             //     prefabIndex = list[prefabIndex].allIndex;
             cr.sideIndex = UnityEngine.Random.Range(0, l.side.Length);
@@ -222,7 +222,7 @@ namespace Resphinx.Maze
         {
             PrefabManager l = list.Count == 1 ? list[0] : GetPool(list, cr, true);
             cr.prefabIndex = list.IndexOf(l);
-            cr.alwaysVisible = l.modelCount.alwaysVisible;
+            cr.alwaysVisible = l.settings.alwaysVisible;
             //        if (list[prefabIndex].name == "columns") Debug.Log("selected pool: " + prefabIndex + " " + list[prefabIndex].side[0].name);
             //     prefabIndex = list[prefabIndex].allIndex;
             //      Debug.Log("mcoun:: " + l.side[cr.sideIndex].name + (l.modelCount == null ? " null" : " " + l.modelCount.byCount));
@@ -237,7 +237,7 @@ namespace Resphinx.Maze
             }
             else
             {
-                index = rotatable && l.modelCount.switchSides ? (cr.sideIndex + UnityEngine.Random.Range(0, 2) * 2) % 4 : cr.sideIndex;
+                index = rotatable && l.settings.switchSides ? (cr.sideIndex + UnityEngine.Random.Range(0, 2) * 2) % 4 : cr.sideIndex;
                 go = cr.gameObject = Clone(l.side[index], MazeMap.maze.levelRoot[cr.level].transform, cr.level, scale);
                 if (index == cr.sideIndex)
                     go.transform.position = p;
@@ -291,7 +291,7 @@ namespace Resphinx.Maze
             if (list.Count == 1)
             {
                 go = cr.gameObject = Clone(list[0].side[index], MazeMap.maze.levelRoot[cr.level].transform, cr.level, scale);
-                cr.alwaysVisible = list[0].modelCount.alwaysVisible;
+                cr.alwaysVisible = list[0].settings.alwaysVisible;
             }
             else
                 go = RandomIndexed(cell.position, list, cr, scale, false);

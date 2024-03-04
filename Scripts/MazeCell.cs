@@ -6,15 +6,18 @@ namespace Resphinx.Maze
     public enum PairSituation { Normal, Handle, Pair, Undefined, Void }
     public enum Connection { Open, Closed, Pending, Unpassable, None }
     public enum Visibility { Invisible, Visible, Transparent, Opaque }
+
     public class MazeCell
     {
         static int lastPairIndex = 0;
         public int x, y, z, index;
 
-        public MazeCell pair = null;
+        public int pairStart = -1, pairCount = 0;
         public bool pairedOnX = true;
         public int pairDirection = -1;
         public int pairIndex = 0;
+        public bool pairEnding = false;
+        public MazeCell otherSide = null;
         float offset, sign;
         public static float H2S;
 
@@ -31,12 +34,11 @@ namespace Resphinx.Maze
         public Vector2[,] opening = new Vector2[2, 2];
         public bool[,] allowPass = new bool[2, 2];
         public Connection[,] connection = new Connection[2, 2];
-        public int stage;
+
         public Vector3 walk = Vector3.right;
-        public const int Left = 0;
-        public const int Right = 2;
-        public const int Up = 1;
-        public const int Down = 3;
+        float factor = 1;
+        Vector3 reference;
+
         public GameObject floor, shape;
         public PrefabManager floorPrefab = null;
         public int shapeIndex = 0;
@@ -53,7 +55,6 @@ namespace Resphinx.Maze
 
         public Visibility[] visibility;
         public List<MazeCell> visiblePair;
-
         public Vector2Int[] around = new Vector2Int[8];
         //    Vector3[] corners = new Vector3[4];
 
@@ -74,7 +75,7 @@ namespace Resphinx.Maze
                     around[j * 2 + i + 4] = new Vector2Int(x + i, y + j);
                 }
             //        xy = MazeManager.maze.size * new Vector2(x, y);
-            position = MazeMap.maze.size * new Vector3(x, 0, y) + MazeMap.maze.height * new Vector3(0, z, 0);
+            reference = position = MazeMap.maze.size * new Vector3(x, 0, y) + MazeMap.maze.height * new Vector3(0, z, 0);
         }
         public static MazeCell Void(int x, int y, int z)
         {
@@ -86,70 +87,81 @@ namespace Resphinx.Maze
         const int _p = 1;
         const int _h = 2;
         const int _v = 3;
-        public static MazeCell[] CreatePair(int x, int y, int z, int d, int h)
+        public static MazeCell[] CreatePath(int x, int y, int z, int side, int length, int height)
         {
-            int x1 = d switch { 0 => x + 1, 2 => x - 1, _ => x };
-            int y1 = d switch { 1 => y + 1, 3 => y - 1, _ => y };
-            int z1 = h == 0 ? z : (h < 0 ? z - 1 : z + 1);
+            int[] Xi = new int[length];
+            int[] Yi = new int[length];
+            int[] Zi = new int[length];
 
-            Debug.Log("creating pair ...");
-            if (MazeMap.maze.cells[x, y, z] != null) return null;
-            if (MazeMap.maze.cells[x, y, z1] != null) return null;
-            if (MazeMap.maze.cells[x1, y1, z] != null) return null;
-            if (MazeMap.maze.cells[x1, y1, z1] != null) return null;
-            Debug.Log("creating pair succeeded");
-
-            MazeCell[] r = new MazeCell[h == 0 ? 2 : 4];
-            r[_o] = new MazeCell(x, y, z);
-            r[_o].situation = PairSituation.Handle;
-            r[_o].Set(d, h == 0 ? Connection.Open : Connection.None);
-            r[_o].Set(X(d));
-            r[_o].Set(d, h == 0 ? Connection.Closed : Connection.Unpassable, true);
-
-            r[_p] = new MazeCell(x1, y1, z + h);
-            r[_o].pair = r[_p];
-            r[_p].pair = r[_o];
-            r[_o].Neighbor(d, r[_p]);
-            r[_p].Neighbor(X(d), r[_o]);
-            r[_p].situation = PairSituation.Pair;
-            r[_o].pairedOnX = r[_p].pairedOnX = d % 2 == 0;
-            r[_o].pairDirection = d;
-            if (h == 0)
+            Debug.Log("creating pair...");
+            for (int i = 0; i < length; i++)
             {
-                r[_p].Set(d, Connection.Pending);
-                r[_p].Set(X(d));
-                r[_p].Set(d, Connection.Closed, true);
+                Xi[i] = side switch { 0 => x + i * 1, 2 => x - i * 1, _ => x };
+                Yi[i] = side switch { 1 => y + i * 1, 3 => y - i * 1, _ => y };
+                Zi[i] = z + height * (i + 1) / length;
+                //        Debug.Log($"pair {i}: {Xi[i]},{Yi[i]},{Zi[i]}");
             }
-            else
-            {
-                r[_p].Set(d, Connection.Open);
-                r[_p].Set(X(d), Connection.None);
-                r[_p].Set(d, Connection.Unpassable, true);
+            // checking validity of the cells
+            for (int i = 0; i < length; i++)
+                for (int j = 0; j <= height; j++)
+                {
+                    int zj = Zi[i] == z + height ? Zi[i] - j : Zi[i] + j;
+                    if (MazeMap.maze.InRange(Xi[i], Yi[i]) && zj < MazeMap.maze.levels && zj >= 0)
+                        if (MazeMap.maze.cells[Xi[i], Yi[i], zj] != null) return null;
+                }
+            Vector2Int d = Delta(side);
+            if (!MazeMap.maze.InRange(Xi[^1] + d.x, Yi[^1] + d.y)) return null;
+            else if (MazeMap.maze.cells[Xi[^1] + d.x, Yi[^1] + d.y, Zi[^1]] != null) return null;
+            d = Delta(X(side));
+            if (!MazeMap.maze.InRange(Xi[0] + d.x, Yi[0] + d.y)) return null;
+            else if (MazeMap.maze.cells[Xi[0] + d.x, Yi[0] + d.y, Zi[0]] != null) return null;
 
-                r[_h] = new MazeCell(x1, y1, z);
-                r[_h].Set(d, Connection.Unpassable);
-                r[_h].Set(X(d), Connection.None);
-                r[_h].Set(d, Connection.Unpassable, true);
-                r[_h].situation = PairSituation.Undefined;
-                r[_h].pair = r[_p];
-                r[_v] = new MazeCell(x, y, z1);
-                r[_v].Set(d, Connection.None);
-                r[_v].Set(X(d), Connection.Unpassable);
-                r[_v].Set(d, Connection.Unpassable, true);
-                r[_v].situation = PairSituation.Undefined;
-                r[_v].pair = r[_o];
-            }
-            if (h != 0)
-            {
-                r[_o].CalculateWalkVector(d, h > 0, true);
-                r[_p].CalculateWalkVector(d, h > 0, false);
-            }
-
+            // creating the ramp
+            MazeCell[] r = new MazeCell[height == 0 ? length : length * 2];
+            int lastZ = z, nextZ;
             lastPairIndex++;
-            for (int i = 0; i < r.Length; i++) r[i].pairIndex = lastPairIndex;
+            int pairStart = MazeMap.maze.pairs.Count;
+            for (int i = 0; i < length; i++)
+            {
+                Debug.Log($"pair {i}: {Xi[i]},{Yi[i]},{Zi[i]}");
+                nextZ = i < length - 1 ? Zi[i + 1] : Zi[^1];
+                MazeCell mc = r[i] = new MazeCell(Xi[i], Yi[i], Zi[i]) { pairIndex = lastPairIndex };
+                MazeMap.maze.pairs.Add(mc);
+                mc.situation = i == 0 ? PairSituation.Handle : PairSituation.Pair;
+                mc.Set(X(side), Zi[i] == lastZ ? Connection.Open : Connection.None);
+                mc.Set(side, Zi[i] == nextZ ? Connection.Open : Connection.None);
+                mc.Set(side, height == 0 ? Connection.Closed : Connection.Unpassable, true);
+                lastZ = Zi[i];
+                mc.pairStart = pairStart;
+                mc.pairCount = length;
+                if (i > 0)
+                {
+                    mc.Neighbor(X(side), r[i - 1]);
+                    r[i - 1].Neighbor(side, r[i]);
+                }
+                mc.pairedOnX = side % 2 == 0;
+                mc.pairDirection = side;
+                if (height != 0)
+                    r[i].CalculateWalkVector(side, length, height, r[0]);
 
+                if (height != 0)
+                {
+                    int zj = Zi[i] == z ? z + height : z;
+                    mc = r[length + i] = new MazeCell(Xi[i], Yi[i], zj) { pairIndex = lastPairIndex };
+                    Debug.Log($"void {i}: {Xi[i]},{Yi[i]},{zj}");
+                    mc.situation = PairSituation.Undefined;
+                    mc.Set(side, i == length - 1 ? Connection.Unpassable : Connection.None);
+                    mc.Set(X(side), i == length - 1 ? Connection.Unpassable : Connection.None);
+                    mc.Set(side, Connection.Unpassable, true);
+                }
+            }
+            r[0].otherSide = r[length-1];
+            r[length-1].otherSide = r[0];
+            r[0].pairEnding = r[length-1].pairEnding = true;
+            Debug.Log("fisished pair..." + r.Length);
             return r;
         }
+
 
         public void Neighbor(int d, MazeCell m)
         {
@@ -185,15 +197,7 @@ namespace Resphinx.Maze
             Vector2Int d = Delta(dir);
             return Connected(d.x, d.y);
         }
-        public bool PairedDirection(int dir)
-        {
-            if (pair != null && situation != PairSituation.Undefined)
-            {
-                Vector2Int d = Delta(dir);
-                return d.x + x == pair.x && d.y + y == pair.y;
-            }
-            else return false;
-        }
+
         public Connection Get(int dir)
         {
             Vector2Int d = Delta(dir);
@@ -262,7 +266,7 @@ namespace Resphinx.Maze
         {
             wallData[side] = new WallData();
             wallData[side].opaque = go;
-            wallData[side].opaque.name += " " + x + "," + y + ": " + side;
+            //      wallData[side].opaque.name += " " + x + "," + y + ": " + side;
             wallData[side].cell[start ? 0 : 1] = this;
             //     wallData[side].opaque.transform.position = position;
             return wallData[side];
@@ -271,7 +275,7 @@ namespace Resphinx.Maze
         {
             wallData[side] = new WallData();
             wallData[side].opaque = go;
-            wallData[side].opaque.name += " " + x + "," + y + ": " + side;
+            //   wallData[side].opaque.name += " " + x + "," + y + ": " + side;
             wallData[side].cell[0] = this;
             //      wallData[side].opaque.transform.position = position;
             wallData[side].mirrored = true;
@@ -297,37 +301,41 @@ namespace Resphinx.Maze
         {
             return Mathf.Abs(Vector2.Dot(p, u) + c) / u.magnitude;
         }
-        public void CalculateWalkVector(int dir, bool ascending, bool startIsLevel)
+
+        public void CalculateWalkVector(int side, int length, int height, MazeCell handle)
         {
-            //   float h = pair.position.y - position.y;
-            float s = MazeMap.maze.size / 2; ;
-            switch (dir)
+            float h = height * MazeMap.maze.height;
+            float s = MazeMap.maze.size;
+            reference = side switch
             {
-                case 0:
-                case 1:
-                    offset = startIsLevel ? s : -s;
-                    sign = ascending ? 1 : -1;
-                    break;
-                case 2:
-                case 3:
-                    offset = startIsLevel ? -s : s;
-                    sign = ascending ? -1 : 1;
-                    break;
-            }            //     walk = (q - p).normalized;
+                0 => handle.position - s * Vector3.right / 2,
+                1 => handle.position - s * Vector3.forward / 2,
+                2 => handle.position + s * Vector3.right / 2,
+                _ => handle.position + s * Vector3.forward / 2,
+            };
+            walk = side switch
+            {
+                0 => new Vector3(length * s, h, 0),
+                1 => new Vector3(0, h, length * s),
+                2 => new Vector3(-length * s, h, 0),
+                _ => new Vector3(0, h, -length * s),
+            };
+            factor = walk.magnitude / (length * s);
+            Debug.Log("pair vect:" + walk.ToString() + " " + reference.ToString() + " " + factor);
         }
         public Vector3 NextPosition(Vector3 feet, Vector3 u, float speed, float dt)
         {
             Vector3 v = speed * dt * u;
             float dy;
             Vector3 f = feet + v;
-            if (pair != null && situation != PairSituation.Undefined)
+            if (pairStart >= 0 && situation != PairSituation.Undefined)
             {
+                Vector3 w = f - reference;
                 if (pairedOnX)
-                    dy = (f.x - position.x + offset);
+                    dy = w.x / walk.x * walk.y;
                 else
-                    dy = (f.z - position.z + offset);
-                dy *= sign * H2S;
-                return new Vector3(f.x, position.y + dy, f.z);
+                    dy = w.z / walk.z * walk.y;
+                return new Vector3(f.x, reference.y + dy, f.z);
             }
             else return new Vector3(f.x, position.y, f.z);
 
@@ -352,25 +360,9 @@ namespace Resphinx.Maze
                 return dt * u;
             }
         }
-        public Vector3 Sit(Vector3 feet)
-        {
-            if (walk.y == 0) return new Vector3(feet.x, position.y, feet.z);
-            else
-            {
-                float y;
-                float offset = MazeMap.maze.size / 2;
-                if (position.x == pair.position.x)
-                    y = position.y + (feet.z - position.z + offset) / (offset * 2) * walk.y / 2;
-                else
-                    y = position.y + (feet.x - position.x + offset) / (offset * 2) * walk.y / 2;
-                return new Vector3(feet.x, y, feet.z);
-            }
-        }
+
         public MazeCell CanGo(Vector3 p)
         {
-            //        Vector2 u = q - p;
-            //   u = new Vector2(-u.y, u.x);
-            //     float c = -Vector2.Dot(u, p);
             float q, s = MazeMap.maze.size, s2 = MazeMap.maze.size / 2;
             float min = MazeMap.maze.size / 15;
             float rx = p.x % s;

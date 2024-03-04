@@ -43,7 +43,7 @@ namespace Resphinx.Maze
         public ItemManager itemManager;
 
         public VisionMap vision;
-
+        public List<MazeCell> pairs = new List<MazeCell>();
         public MazeMap(int row, int col, int level, float size, float height)
         {
             maze = this;
@@ -127,8 +127,8 @@ namespace Resphinx.Maze
             CreateVoids();
             foreach (PrefabManager pm in floorPrefabs)
             {
-                if (pm.modelCount != null)
-                    if (pm.modelCount.paired)
+                if (pm.settings != null)
+                    if (pm.settings.Paired)
                         CreatePair(pm);
             }
             MazeCell.H2S = 0.5f * height / size;
@@ -309,20 +309,19 @@ namespace Resphinx.Maze
             }
         void CreatePair(PrefabManager pm)
         {
-            if (pm.modelCount.vertical != Vertical.None)
+            if (pm.settings.height != 0)
                 if (levels == 0) return;
 
-            int dy = pm.modelCount.vertical == Vertical.None ? 0 : (pm.modelCount.vertical == Vertical.Down ? -1 : 1);
-
+            int dy = pm.settings.height;
             int k = 0;
             int x, y, z;
-            for (int i = 0; i < pm.modelCount.positions.Length && i < pm.modelCount.directions.Length; i++)
-                if (k < pm.modelCount.count)
+            for (int i = 0; i < pm.settings.positions.Length && i < pm.settings.positions.Length; i++)
+                if (k < pm.settings.count)
                 {
-                    x = pm.modelCount.positions[i].x;
-                    y = pm.modelCount.positions[i].y;
-                    z = pm.modelCount.positions[i].z;
-                    MazeCell[] mcs = MazeCell.CreatePair(x, y, z, pm.modelCount.directions[i], dy);
+                    x = pm.settings.positions[i].x;
+                    y = pm.settings.positions[i].y;
+                    z = pm.settings.positions[i].z;
+                    MazeCell[] mcs = MazeCell.CreatePath(x, y, z, pm.settings.directions[i], pm.settings.length, dy);
                     if (mcs != null)
                     {
                         mcs[0].floorPrefab = pm;
@@ -330,7 +329,6 @@ namespace Resphinx.Maze
                             cells[mcs[j].x, mcs[j].y, mcs[j].z] = mcs[j];
                     }
                     k++;
-
                 }
         }
         public bool Check(int x, int y, int z, int d, int h)
@@ -412,7 +410,7 @@ namespace Resphinx.Maze
                                                 go = PrefabManager.RandomIndexed(mc, openPrefabs, cr, size);
                                                 go.name = $"open {i},{j},{k}-{side}";
                                                 vision.AddItem(go, mc.x, mc.y, k, VisionItemType.Open, cr.alwaysVisible, side);
-                                                wallData = mc.SetWall(go, side, openPrefabs[cr.prefabIndex].modelCount.mirrored, openPrefabs[cr.prefabIndex].modelCount.opening);
+                                                wallData = mc.SetWall(go, side, openPrefabs[cr.prefabIndex].settings.mirrored, openPrefabs[cr.prefabIndex].settings.opening);
                                             }
                                             else
                                             {

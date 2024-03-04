@@ -30,6 +30,7 @@ namespace Resphinx.Maze
         public Color navigationColor = Color.white;
         public static bool mouseTilt = true;
         public static UserInputs inputs;
+      
         public void SetCameraTransform(GameObject player)
         {
             character = player.transform;

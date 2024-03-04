@@ -82,20 +82,20 @@ namespace Resphinx.Maze
             {
                 // finding possible sides
                 int side;
-                if (pm.modelCount.adjacentTo == ItemWallRelation.Both) side = UnityEngine.Random.Range(0, 4);
+                if (pm.settings.adjacentTo == ItemWallRelation.Both) side = UnityEngine.Random.Range(0, 4);
                 else
                 {
                     List<int> possible = new List<int>();
                     for (int i = 0; i < 4; i++)
                     {
                         Vector2Int ij = MazeCell.Side(i);
-                        if ((cell.neighbors[ij.x, ij.y] == null) == (pm.modelCount.adjacentTo == ItemWallRelation.OnlyClosed))
+                        if ((cell.neighbors[ij.x, ij.y] == null) == (pm.settings.adjacentTo == ItemWallRelation.OnlyClosed))
                             possible.Add(i);
                     }
                     side = possible.Count > 0 ? possible[UnityEngine.Random.Range(0, possible.Count)] : -1;
                 }
 
-                if (pm.modelCount.rotatable)
+                if (pm.settings.rotatable)
                 {
                     if (side >= 0)
                     {
@@ -106,7 +106,7 @@ namespace Resphinx.Maze
                 }
                 else if (side >= 0)
                 {
-                    bool sideMatched = pm.modelCount.side switch
+                    bool sideMatched = pm.settings.side switch
                     {
                         Sides.X_Positive => side == 0,
                         Sides.Z_Positive => side == 1,

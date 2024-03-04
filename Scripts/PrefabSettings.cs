@@ -22,8 +22,8 @@ namespace Resphinx.Maze
         public int count = 1;        
         public Selector edge = Selector.Both, corner = Selector.Both;
         // floor
-        public bool paired = false;
-        public Vertical vertical = Vertical.None;
+        public bool Paired { get { return length != 1; } }
+        public int length = 1 , height = 0;
         public Vector3Int[] positions;
         public int[] directions;
         // wall 
