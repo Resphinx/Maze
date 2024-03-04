@@ -24,5 +24,6 @@ You can either import it as the package or via the source code. To use the maze 
 
 # Future todos
 1. Importing text-based maze definitions.
-2. Larger "paired" cells.
+2. Larger "paired" cells (Done).
 3. Distorted mazes.
+4. Growable vision map.
