@@ -21,8 +21,15 @@ namespace Resphinx.Maze
         public PairSituation situation = PairSituation.Normal;
         public Vector3Int ijk;
         public Vector3 position;
+        // the 2x2 arrays bellow are arranged as follows: 
+        // 0,0 => x-
+        // 0,1 => x+
+        // 1,0 => z-
+        // 1,1 => z+
+        // you can convert direction index (0..4) to the above indeices by Side method.
         public MazeCell[,] neighbors = new MazeCell[2, 2];
         public Vector2[,] opening = new Vector2[2, 2];
+        public bool[,] allowPass = new bool[2, 2];
         public Connection[,] connection = new Connection[2, 2];
         public int stage;
         public Vector3 walk = Vector3.right;
@@ -54,13 +61,13 @@ namespace Resphinx.Maze
             this.y = y;
             this.z = z;
             index = MazeMap.maze.cols * y + x;
-            //          ij = new Vector2Int(x, y);
-            ijk = new Vector3Int(x, y, z);
+             ijk = new Vector3Int(x, y, z);
             for (int i = 0; i < 2; i++)
                 for (int j = 0; j < 2; j++)
                 {
                     connection[i, j] = Connection.Pending;
                     opening[i, j] = Vector2.up;
+                    allowPass[i,j] = true;
                 }
             //        xy = MazeManager.maze.size * new Vector2(x, y);
             position = MazeMap.maze.size * new Vector3(x, 0, y) + MazeMap.maze.height * new Vector3(0, z, 0);
@@ -381,7 +388,7 @@ namespace Resphinx.Maze
                 if (p.x < position.x)
                 {
                     varDebug = 10;
-                    if (neighbors[0, 0] != null)
+                    if (neighbors[0, 0] != null && allowPass[0,0])
                     {
                         varDebug = 11;
                         if (q > opening[0, 0].x && q < opening[0, 0].y)
@@ -402,7 +409,7 @@ namespace Resphinx.Maze
                 else
                 {
                     varDebug = 20;
-                    if (neighbors[0, 1] != null)
+                    if (neighbors[0, 1] != null && allowPass[0, 1])
                     {
                         varDebug = 21;
                         if (q >= opening[0, 1].x && q <= opening[0, 1].y)
@@ -427,7 +434,7 @@ namespace Resphinx.Maze
                 if (p.z < position.z)
                 {
                     varDebug = 31;
-                    if (neighbors[1, 0] != null)
+                    if (neighbors[1, 0] != null && allowPass[1, 0])
                     {
                         varDebug = 32;
                         if (q >= opening[1, 0].x && q <= opening[1, 0].y)
@@ -447,7 +454,7 @@ namespace Resphinx.Maze
                 else
                 {
                     varDebug = 40;
-                    if (neighbors[1, 1] != null)
+                    if (neighbors[1, 1] != null && allowPass[1, 1])
                     {
                         varDebug = 41;
                         if (q >= opening[1, 1].x && q <= opening[1, 1].y)
