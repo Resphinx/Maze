@@ -14,12 +14,15 @@ namespace Resphinx.Maze
         public static Mazer Instance;
         public float size, height;
         public static bool inGame = false, paused = false;
-
+       
         public int col;
         public int row;
         public int levelCount;
+        public CameraPosition cameraPosition = CameraPosition.Cell;
+        public bool rotateCamera = false;
+        public float relativeDistance = 2;
 
-        public GameObject prefabRoot;
+        public GameObject prefabRoot, character;
         public ItemID[] mazeItems;
         public MazeMap maze;
         public MazeWalker walker;
@@ -53,8 +56,10 @@ namespace Resphinx.Maze
             maze.Initialize();
             maze.GenerateModel(false);
             MazeMap.maze.prefabClone.SetActive(false);
+            prefabRoot.SetActive(false);
 
-            walker = new MazeWalker() { maze = maze, camera = Camera.main.transform };
+            walker = new MazeWalker() { maze = maze};
+            walker.SetCameraTransform(character);
             checkingVision = true;
 
 

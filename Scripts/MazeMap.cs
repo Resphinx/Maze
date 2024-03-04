@@ -416,14 +416,17 @@ namespace Resphinx.Maze
                                                 go.name = $"closed {i},{j},{k}-{side}";
                                                 vision.AddItem(go, mc.x, mc.y, k, VisionItemType.Opaque, cr.alwaysVisible, side);
                                                 wallData = mc.SetWall(go, side);
-                                                rand = UnityEngine.Random.Range(0, TransChance);
-                                                if (rand == 2)
+                                                if (seePrefabs.Count > 0)
                                                 {
-                                                    seeThroughWalls.Add(wallData);
-                                                    go = PrefabManager.RandomIndexed(mc, seePrefabs, cr, size);
-                                                    go.name = $"trans {i},{j},{k}-{side}";
-                                                    vision.AddItem(go, mc.x, mc.y, k, VisionItemType.Transparent, cr.alwaysVisible, side);
-                                                    wallData.seeThrough = go;
+                                                    rand = UnityEngine.Random.Range(0, TransChance);
+                                                    if (rand == 2)
+                                                    {
+                                                        seeThroughWalls.Add(wallData);
+                                                        go = PrefabManager.RandomIndexed(mc, seePrefabs, cr, size);
+                                                        go.name = $"trans {i},{j},{k}-{side}";
+                                                        vision.AddItem(go, mc.x, mc.y, k, VisionItemType.Transparent, cr.alwaysVisible, side);
+                                                        wallData.seeThrough = go;
+                                                    }
                                                 }
                                             }
                                             cells[v.x, v.y, k].SetWall(wallData, MazeCell.X(side));
