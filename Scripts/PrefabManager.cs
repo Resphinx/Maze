@@ -221,6 +221,7 @@ namespace Resphinx.Maze
         public static GameObject RandomIndexed(Vector3 p, List<PrefabManager> list, CloneResult cr, float scale, bool rotatable = true)
         {
             PrefabManager l = list.Count == 1 ? list[0] : GetPool(list, cr, true);
+            cr.prefabIndex = list.IndexOf(l);
             cr.alwaysVisible = l.modelCount.alwaysVisible;
             //        if (list[prefabIndex].name == "columns") Debug.Log("selected pool: " + prefabIndex + " " + list[prefabIndex].side[0].name);
             //     prefabIndex = list[prefabIndex].allIndex;
