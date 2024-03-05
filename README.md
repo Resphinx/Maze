@@ -24,7 +24,7 @@ on start. You will need to pause or deactivate this via script (use <i>pause</i>
 1. For limited open walls (with another Opening value than 0,1) may cause the player stick in the walls if entered from certain angles.
 # Future todos
 1. Importing text-based maze definitions.
-<i>2. Larger "paired" cells (done but not tried)</i>
+2. <i>Larger "paired" cells (done but not tried)</i>.
 3. Distorted mazes.
-<i>4. Growable vision map. (done)</i>
-<i>5. Multiple viewing ways: from above, and inside the cell (done, but not interchangeable realtime)</i>
+4. <i>Growable vision map (done)</i>.
+5. <i>Multiple viewing ways: from above, and inside the cell (done, but not interchangeable realtime).</i>
