@@ -8,14 +8,14 @@ using UnityEngine;
 namespace Resphinx.Maze
 {
     public enum MovementMode { Normal, Dash }
-    public enum DashMode {Right, Forward,Left,Back,  Look, Up, Down,  }
-    public enum VisionMode { RayCast, Around}
+    public enum DashMode { Right, Forward, Left, Back, Look, Up, Down, }
+    public enum VisionMode { RayCast, Around }
     public class Mazer : MonoBehaviour
     {
         public static Mazer Instance;
         public float size, height;
         public static bool inGame = false, paused = false;
-       
+
         public int col;
         public int row;
         public int levelCount;
@@ -29,8 +29,8 @@ namespace Resphinx.Maze
         public ItemID[] mazeItems;
         public MazeMap maze;
         public MazeWalker walker;
-        
-     
+
+
         public static float ActiveTime = 0, MaxTime = 900;
         bool checkingVision;
         public static UserInputs inputs;
@@ -48,18 +48,18 @@ namespace Resphinx.Maze
             UnityEngine.Random.InitState(DateTime.Now.Millisecond);
             if (maze != null) maze.DestroyEverything();
             walker = null;
-            MazeMap.maze = maze = new MazeMap(row, col, levelCount, size, height);
+            maze = new MazeMap(row, col, levelCount, size, height) { owner = this };
 
-            MazeMap.maze.root = new GameObject("Maze Root");
+            maze.root = new GameObject("Maze Root");
             maze.itemManager.SetItems(mazeItems);
             maze.SetPrefabs(prefabRoot);
             UserInputs.InitDefault();
             maze.Initialize();
             maze.GenerateModel(false);
-            MazeMap.maze.prefabClone.SetActive(false);
+            maze.prefabClone.SetActive(false);
             prefabRoot.SetActive(false);
 
-            walker = new MazeWalker() { maze = maze};
+            walker = new MazeWalker() { maze = maze };
             walker.SetCameraTransform(character);
             checkingVision = true;
 
@@ -68,7 +68,7 @@ namespace Resphinx.Maze
             VisionMap.calculating = true;
 
             Application.targetFrameRate = 10;
-            maze.SetVision(visionMode== VisionMode.RayCast, maxVisionOffset);
+            maze.SetVision(visionMode == VisionMode.RayCast, maxVisionOffset);
         }
         public void VisionComplete()
         {
@@ -95,13 +95,13 @@ namespace Resphinx.Maze
             }
             if (!inGame || paused) return;
             ActiveTime += Time.deltaTime;
-            
+
             walker.Update();
 
-            if (UserInputs.Pressed(UserInputs.Dash)) walker.ActivateDash(DashMode.Look);                
+            if (UserInputs.Pressed(UserInputs.Dash)) walker.ActivateDash(DashMode.Look);
             if (UserInputs.Pressed(UserInputs.Up)) walker.ActivateDash(DashMode.Up);
-                 if (UserInputs.Pressed(UserInputs.Down))walker.ActivateDash(DashMode.Down);
-           
+            if (UserInputs.Pressed(UserInputs.Down)) walker.ActivateDash(DashMode.Down);
+
         }
     }
 }

@@ -2,8 +2,7 @@
 A simple multi-level realtime random maze generator for Unity.
 
 You can either import it as the package or via the source code. To use the maze generator you need to do a few steps:
-1. Attach the component Mazer to an object on the scene. You can have only <b>one</b> maze in a scene at a time, however, you can create multiple mazes after each other (currently the maze is generated 
-on start. You will need to pause or deactivate this via script (use <i>pause</i> or <i>inGame</i> fields of Mazer), or alternatively, change how </>Init()</i> is called in Mazer class).
+1. Attach the component Mazer to an object on the scene. You can have multiple mazes in a scene simultaneously, however, the mazes are generated on Start. You will need to pause or deactivate this via script (use <i>pause</i> or <i>inGame</i> fields of Mazer), or alternatively, change how </>Init()</i> is called in Mazer class.
 2. Set the properties of each Mazer component (columns, rows, level count, size and height), and most importantly the <b>root</b> object of your maze elements. You should also assign the Character filed (it doesn't need to be your actual character). 
 3. Your maze objects are the immediate children of this root object or gameobjects/prefabs added to the Items field of a MazeElements component attach to it. <b>Only the objects with a PrefabSettings component will be considered</b>.
 4. You need to define at least one <b>set</b> of a kind for floors, columns and, open and closed walls, repectively, via PrefabSettings components. 

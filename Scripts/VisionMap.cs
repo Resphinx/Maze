@@ -199,8 +199,8 @@ namespace Resphinx.Maze
                 }
                 else
                 {
-                    pair.Add(MazeMap.maze.pairs[cell.pairStart]);
-                    pair.Add(MazeMap.maze.pairs[cell.pairStart + cell.pairCount - 1]);
+                    pair.Add(maze.pairs[cell.pairStart]);
+                    pair.Add(maze.pairs[cell.pairStart + cell.pairCount - 1]);
                //      return;
                 }
             }
@@ -267,7 +267,7 @@ namespace Resphinx.Maze
                     if (i < maze.cols && j < maze.rows && i >= 0 && j >= 0)
                     {
                         int offset = Mathf.Max(Mathf.Abs(i - cell.x), Mathf.Abs(j - cell.y));
-                        ShowCell(cell, MazeMap.maze.cells[i, j, level], offset, index);
+                        ShowCell(cell,maze.cells[i, j, level], offset, index);
                     }
                 }
             if (floor[cell.x, cell.y] >= 0) cell.visibility[floor[cell.x, cell.y], index] = Visibility.Visible;
@@ -431,7 +431,7 @@ namespace Resphinx.Maze
         }
         void ApplyOnPairs(MazeCell cell, int offset)
         {
-            bool[] levelVisibility = new bool[MazeMap.maze.levelRoot.Length];
+            bool[] levelVisibility = new bool[maze.levelRoot.Length];
             levelVisibility[level] = true;
             int z;
             MazeCell pair;
@@ -448,11 +448,11 @@ namespace Resphinx.Maze
                 }
 
             }
-            for (int i = 0; i < MazeMap.maze.levelRoot.Length; i++)
-                if (MazeMap.maze.vision.levels[i].levelActive != levelVisibility[i])
+            for (int i = 0; i < maze.levelRoot.Length; i++)
+                if (maze.vision.levels[i].levelActive != levelVisibility[i])
                 {
-                    MazeMap.maze.levelRoot[i].SetActive(levelVisibility[i]);
-                    MazeMap.maze.vision.levels[i].levelActive = levelVisibility[i];
+                    maze.levelRoot[i].SetActive(levelVisibility[i]);
+                    maze.vision.levels[i].levelActive = levelVisibility[i];
                     Debug.Log("level " + i + " " + levelVisibility[i]);
                 }
         }

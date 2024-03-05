@@ -43,15 +43,15 @@ namespace Resphinx.Maze
         public float chance = 0.2f;
         public List<PrefabManager> items = new List<PrefabManager>();
 
-        public GameObject AddItem(GameObject handle)
+        public GameObject AddItem(MazeMap maze, GameObject handle)
         {
             PrefabManager.onCreation = true;
             PrefabSettings mc = handle.GetComponent<PrefabSettings>();
             PrefabManager pm;
             if (mc.rotatable)
-                items.Add(pm = PrefabManager.CreateQuadro(id, handle));
+                items.Add(pm = PrefabManager.CreateQuadro(maze, id, handle));
             else
-                items.Add(pm = PrefabManager.CreateMono(id, handle));
+                items.Add(pm = PrefabManager.CreateMono(maze, id, handle));
             PrefabManager.onCreation = false;
             return pm.root;
         }
@@ -67,12 +67,12 @@ namespace Resphinx.Maze
                 if (id.id == s.ToLower()) return id;
             return null;
         }
-        public void AddItem(GameObject g)
+        public void AddItem(MazeMap maze, GameObject g)
         {
             string s = g.GetComponent<PrefabSettings>().id;
             ItemID iid = Find(s);
             if (iid != null)
-                iid.AddItem(g);
+                iid.AddItem(maze, g);
         }
         public GameObject GetItem(MazeCell cell, int index, CloneResult cr)
         {

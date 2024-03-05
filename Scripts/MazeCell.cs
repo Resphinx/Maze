@@ -28,6 +28,7 @@ namespace Resphinx.Maze
     }
     public class MazeCell
     {
+        MazeMap maze;
         static int lastPairIndex = 0;
         public int x, y, z, index;
 
@@ -77,12 +78,13 @@ namespace Resphinx.Maze
         public Vector2Int[] around = new Vector2Int[8];
         //    Vector3[] corners = new Vector3[4];
 
-        public MazeCell(int x, int y, int z)
+        public MazeCell(MazeMap map, int x, int y, int z)
         {
+            this.maze = map;
             this.x = x;
             this.y = y;
             this.z = z;
-            index = MazeMap.maze.cols * y + x;
+            index = maze.cols * y + x;
             ijk = new Vector3Int(x, y, z);
             for (int i = 0; i < 2; i++)
                 for (int j = 0; j < 2; j++)
@@ -94,11 +96,11 @@ namespace Resphinx.Maze
                     around[j * 2 + i + 4] = new Vector2Int(x + i, y + j);
                 }
             //        xy = MazeManager.maze.size * new Vector2(x, y);
-            reference = position = MazeMap.maze.size * new Vector3(x, 0, y) + MazeMap.maze.height * new Vector3(0, z, 0);
+            reference = position = maze.size * new Vector3(x, 0, y) + maze.height * new Vector3(0, z, 0);
         }
-        public static MazeCell Void(int x, int y, int z)
+        public static MazeCell Void(MazeMap map, int x, int y, int z)
         {
-            MazeCell cell = new MazeCell(x, y, z);
+            MazeCell cell = new MazeCell(map, x, y, z);
             cell.situation = PairSituation.Void;
             return cell;
         }
@@ -106,7 +108,7 @@ namespace Resphinx.Maze
         const int _p = 1;
         const int _h = 2;
         const int _v = 3;
-        public static MazeCell[] CreatePath(int x, int y, int z, int side, int length, int height)
+        public static MazeCell[] CreatePath(MazeMap maze, int x, int y, int z, int side, int length, int height)
         {
             int[] Xi = new int[length];
             int[] Yi = new int[length];
@@ -125,27 +127,27 @@ namespace Resphinx.Maze
                 for (int j = 0; j <= height; j++)
                 {
                     int zj = Zi[i] == z + height ? Zi[i] - j : Zi[i] + j;
-                    if (MazeMap.maze.InRange(Xi[i], Yi[i]) && zj < MazeMap.maze.levels && zj >= 0)
-                        if (MazeMap.maze.cells[Xi[i], Yi[i], zj] != null) return null;
+                    if (maze.InRange(Xi[i], Yi[i]) && zj < maze.levels && zj >= 0)
+                        if (maze.cells[Xi[i], Yi[i], zj] != null) return null;
                 }
             Vector2Int d = Delta(side);
-            if (!MazeMap.maze.InRange(Xi[^1] + d.x, Yi[^1] + d.y)) return null;
-            else if (MazeMap.maze.cells[Xi[^1] + d.x, Yi[^1] + d.y, Zi[^1]] != null) return null;
+            if (!maze.InRange(Xi[^1] + d.x, Yi[^1] + d.y)) return null;
+            else if (maze.cells[Xi[^1] + d.x, Yi[^1] + d.y, Zi[^1]] != null) return null;
             d = Delta(X(side));
-            if (!MazeMap.maze.InRange(Xi[0] + d.x, Yi[0] + d.y)) return null;
-            else if (MazeMap.maze.cells[Xi[0] + d.x, Yi[0] + d.y, Zi[0]] != null) return null;
+            if (!maze.InRange(Xi[0] + d.x, Yi[0] + d.y)) return null;
+            else if (maze.cells[Xi[0] + d.x, Yi[0] + d.y, Zi[0]] != null) return null;
 
             // creating the ramp
             MazeCell[] r = new MazeCell[height == 0 ? length : length * 2];
             int lastZ = z, nextZ;
             lastPairIndex++;
-            int pairStart = MazeMap.maze.pairs.Count;
+            int pairStart = maze.pairs.Count;
             for (int i = 0; i < length; i++)
             {
                 Debug.Log($"pair {i}: {Xi[i]},{Yi[i]},{Zi[i]}");
                 nextZ = i < length - 1 ? Zi[i + 1] : Zi[^1];
-                MazeCell mc = r[i] = new MazeCell(Xi[i], Yi[i], Zi[i]) { pairIndex = lastPairIndex };
-                MazeMap.maze.pairs.Add(mc);
+                MazeCell mc = r[i] = new MazeCell(maze, Xi[i], Yi[i], Zi[i]) { pairIndex = lastPairIndex };
+                maze.pairs.Add(mc);
                 mc.situation = i == 0 ? PairSituation.Handle : PairSituation.Pair;
                 mc.Set(X(side), Zi[i] == lastZ ? Connection.Open : Connection.None);
                 mc.Set(side, Zi[i] == nextZ ? Connection.Open : Connection.None);
@@ -166,7 +168,7 @@ namespace Resphinx.Maze
                 if (height != 0)
                 {
                     int zj = Zi[i] == z ? z + height : z;
-                    mc = r[length + i] = new MazeCell(Xi[i], Yi[i], zj) { pairIndex = lastPairIndex };
+                    mc = r[length + i] = new MazeCell(maze, Xi[i], Yi[i], zj) { pairIndex = lastPairIndex };
                     Debug.Log($"void {i}: {Xi[i]},{Yi[i]},{zj}");
                     mc.situation = PairSituation.Undefined;
                     mc.Set(side, i == length - 1 ? Connection.Unpassable : Connection.None);
@@ -332,8 +334,8 @@ namespace Resphinx.Maze
 
         public void CalculateWalkVector(int side, int length, int height, MazeCell handle)
         {
-            float h = height * MazeMap.maze.height;
-            float s = MazeMap.maze.size;
+            float h = height * maze.height;
+            float s = maze.size;
             reference = side switch
             {
                 0 => handle.position - s * Vector3.right / 2,
@@ -391,8 +393,8 @@ namespace Resphinx.Maze
 
         public MazeCell CanGo(Vector3 p)
         {
-            float q, s = MazeMap.maze.size, s2 = MazeMap.maze.size / 2;
-            float min = MazeMap.maze.size / 15;
+            float q, s = maze.size, s2 = maze.size / 2;
+            float min = maze.size / 15;
             float rx = p.x >= 0 ? p.x % s : (p.x + s) % s;
             float rz = p.z >= 0 ? p.z % s : (p.z + s) % s;
             rx -= s2;
@@ -472,11 +474,11 @@ namespace Resphinx.Maze
         }
         public void EnterCell(bool checkShape)
         {
-            MazeMap.maze.vision.levels[z].Apply(this, Mazer.Instance.currentVisionOffset);
+            maze.vision.levels[z].Apply(this, maze.owner.currentVisionOffset);
         }
         public void LeaveCell()
         {
-            //          MazeMap.maze.vision.levels[z].Apply(this);
+            //          maze.vision.levels[z].Apply(this);
         }
         public void ReviveShape()
         {

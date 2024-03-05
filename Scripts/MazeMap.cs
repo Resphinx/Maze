@@ -14,9 +14,9 @@ namespace Resphinx.Maze
     }
     public class MazeMap
     {
+        public Mazer owner;
         public GameObject root;
-        public static MazeMap maze;
-
+        
         public float activeTime;
         public const int VisibilityStateCount = 2;
         public const int TransChance = 7;
@@ -46,8 +46,7 @@ namespace Resphinx.Maze
         public List<MazeCell> pairs = new List<MazeCell>();
         public MazeMap(int row, int col, int level, float size, float height)
         {
-            maze = this;
-            this.size = size;
+             this.size = size;
             this.height = height;
             rows = row;
             cols = col;
@@ -85,18 +84,18 @@ namespace Resphinx.Maze
                 switch (mc.type)
                 {
                     case ModelType.Wall:
-                        if (mc.wallType == WallType.Closed) wallPrefabs.Add(PrefabManager.CreateQuadro("wall", go));
-                        else if (mc.wallType == WallType.Open) openPrefabs.Add(PrefabManager.CreateQuadro("open", go));
-                        else seePrefabs.Add(PrefabManager.CreateQuadro("see", go));
+                        if (mc.wallType == WallType.Closed) wallPrefabs.Add(PrefabManager.CreateQuadro(this, "wall", go));
+                        else if (mc.wallType == WallType.Open) openPrefabs.Add(PrefabManager.CreateQuadro(this, "open", go));
+                        else seePrefabs.Add(PrefabManager.CreateQuadro(this, "see", go));
                         break;
                     case ModelType.Column:
-                        columnPrefabs.Add(PrefabManager.CreateRandom("columns", go));
+                        columnPrefabs.Add(PrefabManager.CreateRandom(this, "columns", go));
                         break;
                     case ModelType.Floor:
-                        floorPrefabs.Add(PrefabManager.CreateRandom("floor", go));
+                        floorPrefabs.Add(PrefabManager.CreateRandom(this, "floor", go));
                         break;
                     case ModelType.Item:
-                        itemManager.AddItem(go);
+                        itemManager.AddItem(this, go);
                         break;
                 }
         }
@@ -257,7 +256,7 @@ namespace Resphinx.Maze
                     for (int m = 0; m < voids[i].size.x; m++)
                         for (int n = 0; n < voids[i].size.y; n++)
                             if (x < xMax && y < yMax && x + m >= 0 && y + n >= 0)
-                                cells[x + m, y + n, z] = MazeCell.Void(x + m, y + n, z);
+                                cells[x + m, y + n, z] = MazeCell.Void(this, x + m, y + n, z);
                 }
             }
         }
@@ -280,7 +279,7 @@ namespace Resphinx.Maze
             MazeCell[] path = new MazeCell[total2D];
             int d;
 
-            path[0] = new MazeCell(first.x, first.y, lev) { };
+            path[0] = new MazeCell(this, first.x, first.y, lev) { };
             while (i >= 0)
             {
                 d = RandomDir(dir[path[i].index]);
@@ -293,7 +292,7 @@ namespace Resphinx.Maze
                             path[i].Set(d);
                             i++;
 
-                            path[i] = cells[p.x, p.y, lev] = new MazeCell(p.x, p.y, lev) { };
+                            path[i] = cells[p.x, p.y, lev] = new MazeCell(this, p.x, p.y, lev) { };
                             path[i].Set(MazeCell.X(d));
                             path[i].Neighbor(MazeCell.X(d), path[i - 1]);
                             path[i - 1].Neighbor(d, path[i]);
@@ -312,7 +311,7 @@ namespace Resphinx.Maze
             for (int m = 0; m < cols; m++)
                 for (int n = 0; n < rows; n++)
                     if (cells[m, n, lev] == null)
-                        cells[m, n, lev] = MazeCell.Void(m, n, lev);
+                        cells[m, n, lev] = MazeCell.Void(this, m, n, lev);
         }
         void CreatePair(PrefabManager pm)
         {
@@ -328,7 +327,7 @@ namespace Resphinx.Maze
                     x = pm.settings.positions[i].x;
                     y = pm.settings.positions[i].y;
                     z = pm.settings.positions[i].z;
-                    MazeCell[] mcs = MazeCell.CreatePath(x, y, z, pm.settings.directions[i], pm.settings.length, dy);
+                    MazeCell[] mcs = MazeCell.CreatePath(this, x, y, z, pm.settings.directions[i], pm.settings.length, dy);
                     if (mcs != null)
                     {
                         mcs[0].floorPrefab = pm;
