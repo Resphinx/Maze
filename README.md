@@ -28,3 +28,4 @@ on start. You will need to pause or deactivate this via script (use <i>pause</i>
 3. Distorted mazes.
 4. <i>Growable vision map (done)</i>.
 5. <i>Multiple viewing ways: from above, and inside the cell (done, but not interchangeable realtime).</i>
+6. Create documentation.
