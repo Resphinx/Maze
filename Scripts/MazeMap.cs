@@ -44,6 +44,7 @@ namespace Resphinx.Maze
 
         public VisionMap vision;
         public List<MazeCell> pairs = new List<MazeCell>();
+        public int lastPairIndex = 0;
         public MazeMap(int row, int col, int level, float size, float height)
         {
              this.size = size;
@@ -498,7 +499,7 @@ namespace Resphinx.Maze
                     if (cells[i, j, lev] != null)
                         if (cells[i, j, lev].situation == PairSituation.Normal)
                         {
-                            Mazer.Instance.walker.SetCurrentCell(i, j, lev);
+                           owner.walker.SetCurrentCell(i, j, lev);
                             return;
                         }
         }
@@ -511,10 +512,10 @@ namespace Resphinx.Maze
         public void SetTransparency(bool t)
         {
             transparency = t;
-            if (t) transparencyActivation = Mazer.ActiveTime;
+            if (t) transparencyActivation = owner.ActiveTime;
             else
             {
-                MazeCell mc = Mazer.Instance.walker.currentCell;
+                MazeCell mc = owner.walker.currentCell;
                 vision.levels[mc.z].RemoveTransparency(mc);
             }
         }

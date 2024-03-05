@@ -29,7 +29,6 @@ namespace Resphinx.Maze
     public class MazeCell
     {
         MazeMap maze;
-        static int lastPairIndex = 0;
         public int x, y, z, index;
 
         public int pairStart = -1, pairCount = 0;
@@ -140,13 +139,13 @@ namespace Resphinx.Maze
             // creating the ramp
             MazeCell[] r = new MazeCell[height == 0 ? length : length * 2];
             int lastZ = z, nextZ;
-            lastPairIndex++;
+           maze. lastPairIndex++;
             int pairStart = maze.pairs.Count;
             for (int i = 0; i < length; i++)
             {
                 Debug.Log($"pair {i}: {Xi[i]},{Yi[i]},{Zi[i]}");
                 nextZ = i < length - 1 ? Zi[i + 1] : Zi[^1];
-                MazeCell mc = r[i] = new MazeCell(maze, Xi[i], Yi[i], Zi[i]) { pairIndex = lastPairIndex };
+                MazeCell mc = r[i] = new MazeCell(maze, Xi[i], Yi[i], Zi[i]) { pairIndex = maze.lastPairIndex };
                 maze.pairs.Add(mc);
                 mc.situation = i == 0 ? PairSituation.Handle : PairSituation.Pair;
                 mc.Set(X(side), Zi[i] == lastZ ? Connection.Open : Connection.None);
@@ -168,7 +167,7 @@ namespace Resphinx.Maze
                 if (height != 0)
                 {
                     int zj = Zi[i] == z ? z + height : z;
-                    mc = r[length + i] = new MazeCell(maze, Xi[i], Yi[i], zj) { pairIndex = lastPairIndex };
+                    mc = r[length + i] = new MazeCell(maze, Xi[i], Yi[i], zj) { pairIndex = maze.lastPairIndex };
                     Debug.Log($"void {i}: {Xi[i]},{Yi[i]},{zj}");
                     mc.situation = PairSituation.Undefined;
                     mc.Set(side, i == length - 1 ? Connection.Unpassable : Connection.None);

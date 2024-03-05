@@ -19,18 +19,17 @@ namespace Resphinx.Maze
         public bool canDash = true;
         public Transform camera, character;
         public Vector3 feet;
-        public static float moveSpeed = 2f;
+        public  float moveSpeed = 2f;
         public float dashTime = 0.3f;
         public float turnSpeed = 150;
-        public static float speedBoost = 1;
+        public  float speedBoost = 1;
         MazeDasher dasher = new MazeDasher();
         public MazeCell lastCell, currentCell;
         public float elevation = 1.5f;
         float currentBounceAngle = 0;
         float bounceAngleChange = Mathf.PI * 3.5f;
         public Color navigationColor = Color.white;
-        public static bool mouseTilt = true;
-        public static UserInputs inputs;
+        public  bool mouseTilt = true;
         public DashMode dashMode = DashMode.Look;
         public MovementMode movementMode = MovementMode.Normal;
         public void SetCameraTransform(GameObject player)
@@ -41,14 +40,14 @@ namespace Resphinx.Maze
             character.transform.localPosition = -elevation * Vector3.up;
             Transform camX = Camera.main.transform;
             camX.SetParent(camera, false);
-            if (Mazer.Instance.cameraPosition == CameraPosition.Cell)
+            if (maze.owner.cameraPosition == CameraPosition.Cell)
             {
                 camX.transform.localPosition = Vector3.zero;
                 camX.rotation = Quaternion.identity;
             }
             else
             {
-                camX.transform.localPosition = Mazer.Instance.relativeDistance * 0.7f * maze.size * (Vector3.up - Vector3.forward);
+                camX.transform.localPosition = maze.owner.cameraDistance * 0.7f * maze.size * (Vector3.up - Vector3.forward);
                 camX.transform.LookAt(character.transform.position - camX.position);
             }
             //       Debug.Log("set cam: " + camera.position.y);
@@ -58,7 +57,7 @@ namespace Resphinx.Maze
             camera.position = feet;
             camera.position += elevation * Vector3.up;
             if (!dash)
-                if (Mazer.Instance.cameraPosition == CameraPosition.Cell)
+                if (maze.owner.cameraPosition == CameraPosition.Cell)
                 {
                     camera.position += Mathf.Sin(currentBounceAngle) * 0.02f * Vector3.up;
                     currentBounceAngle += Time.deltaTime * bounceAngleChange * (1 + (speedBoost - 1) / 2);
@@ -124,7 +123,7 @@ namespace Resphinx.Maze
                     }
                     break;
             }
-            if (Mazer.Instance.cameraPosition == CameraPosition.Cell && mouseTilt)
+            if (maze.owner.cameraPosition == CameraPosition.Cell && mouseTilt)
             {
                 float tilt = GetTilt();
                 Vector3 fwd = new Vector3(fwd3d.x, mouseTilt ? tilt : camera.forward.y, fwd3d.z).normalized;
@@ -158,7 +157,7 @@ namespace Resphinx.Maze
             //     Debug.Log("set cell: " + camera.position.y);
             currentCell = maze.cells[x, y, z];
             lastCell = currentCell;
-            maze.vision.levels[z].Apply(currentCell , Mazer.Instance.currentVisionOffset);
+            maze.vision.levels[z].Apply(currentCell , maze.owner.currentVisionOffset);
         }
         bool DashDirection(Vector3 u, MazeCell cell, out MazeCell md)
         {
@@ -210,9 +209,9 @@ namespace Resphinx.Maze
         }
         Vector3 Turn(int dir)
         {
-            if (Mazer.Instance.cameraPosition == CameraPosition.Above)
+            if (maze.owner.cameraPosition == CameraPosition.Above)
             {
-                if (Mazer.Instance.rotateCamera)
+                if (maze.owner.rotateCamera)
                 {
                     camera.Rotate(Vector3.up, dir * Time.deltaTime * turnSpeed, Space.World);
                     return new Vector3(camera.forward.x, 0, camera.forward.z);
@@ -240,7 +239,7 @@ namespace Resphinx.Maze
                 switch (dashMode)
                 {
                     case DashMode.Look:
-                        v = Mazer.Instance.cameraPosition == CameraPosition.Above && !Mazer.Instance.rotateCamera ? character.transform.forward : camera.transform.forward;
+                        v = maze.owner.cameraPosition == CameraPosition.Above && !maze.owner.rotateCamera ? character.transform.forward : camera.transform.forward;
                         break;
                     case DashMode.Right: v = Vector3.forward; break;
                     case DashMode.Forward: v = Vector3.right; break;

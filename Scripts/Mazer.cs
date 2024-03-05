@@ -12,8 +12,7 @@ namespace Resphinx.Maze
     public enum VisionMode { RayCast, Around }
     public class Mazer : MonoBehaviour
     {
-        public static Mazer Instance;
-        public float size, height;
+         public float size, height;
         public static bool inGame = false, paused = false;
 
         public int col;
@@ -21,30 +20,28 @@ namespace Resphinx.Maze
         public int levelCount;
         public CameraPosition cameraPosition = CameraPosition.Cell;
         public bool rotateCamera = false;
-        public float relativeDistance = 2;
+        public float cameraDistance = 2;
         public VisionMode visionMode = VisionMode.Around;
         public int maxVisionOffset = 0;
         public int currentVisionOffset = 0;
+        public int maxRadius = 5;
         public GameObject prefabRoot, character;
         public ItemID[] mazeItems;
         public MazeMap maze;
         public MazeWalker walker;
 
 
-        public static float ActiveTime = 0, MaxTime = 900;
+        public float ActiveTime = 0, MaxTime = 900;
         bool checkingVision;
         public static UserInputs inputs;
         private void Start()
         {
-            Instance = this;
-            Init();
+              Init();
         }
         public void Init()
         {
 
             checkingVision = false;
-            MazeWalker.mouseTilt = true;
-            MazeWalker.speedBoost = 1;
             UnityEngine.Random.InitState(DateTime.Now.Millisecond);
             if (maze != null) maze.DestroyEverything();
             walker = null;
@@ -60,6 +57,8 @@ namespace Resphinx.Maze
             prefabRoot.SetActive(false);
 
             walker = new MazeWalker() { maze = maze };
+            walker.mouseTilt = true;
+            walker.speedBoost = 1;
             walker.SetCameraTransform(character);
             checkingVision = true;
 
