@@ -81,7 +81,7 @@ namespace Resphinx.Maze
             if (pm != null)
             {
                 // finding possible sides
-                int side;
+                int side=-1;
                 if (pm.settings.adjacentTo == ItemWallRelation.Both) side = UnityEngine.Random.Range(0, 4);
                 else
                 {
@@ -122,7 +122,9 @@ namespace Resphinx.Maze
                         g.transform.position = cell.floor.transform.position;
                     }
                 }
+                cr.sideIndex = side;
             }
+            
             return g;
         }
 

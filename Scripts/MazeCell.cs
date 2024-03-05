@@ -1,12 +1,31 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 namespace Resphinx.Maze
 {
     public enum PairSituation { Normal, Handle, Pair, Undefined, Void }
     public enum Connection { Open, Closed, Pending, Unpassable, None }
-    public enum Visibility { Invisible, Visible, Transparent, Opaque }
 
+    public class Visibility
+    {
+        public bool visible = false;
+        public int offset = int.MaxValue;
+        public static Visibility Visible = new Visibility() { visible = true };
+        public Visibility() { }
+        public Visibility(Visibility v)
+        {
+            visible = v.visible;
+            offset = v.offset;
+        }
+        public static Visibility Min(Visibility a, Visibility b)
+        {
+            Visibility v = new Visibility();
+            v.offset = Mathf.Min(a.offset, b.offset);
+            if (a.visible || b.visible) v.visible = true;
+            return v;
+        }
+    }
     public class MazeCell
     {
         static int lastPairIndex = 0;
@@ -52,9 +71,9 @@ namespace Resphinx.Maze
         public int[] columnStages = new int[4];
         public bool[] transWall = new bool[4];
         public GameObject[] items;
-
-        public Visibility[] visibility;
-        public List<MazeCell> visiblePair;
+        public int[] itemRotation;
+        public Visibility[,] visibility;
+        public List<MazeCell> visiblePairOpaque, visiblePairTransparent;
         public Vector2Int[] around = new Vector2Int[8];
         //    Vector3[] corners = new Vector3[4];
 
@@ -155,13 +174,22 @@ namespace Resphinx.Maze
                     mc.Set(side, Connection.Unpassable, true);
                 }
             }
-            r[0].otherSide = r[length-1];
-            r[length-1].otherSide = r[0];
-            r[0].pairEnding = r[length-1].pairEnding = true;
+            r[0].otherSide = r[length - 1];
+            r[length - 1].otherSide = r[0];
+            r[0].pairEnding = r[length - 1].pairEnding = true;
             Debug.Log("fisished pair..." + r.Length);
             return r;
         }
 
+        internal void InitializeVisibility(int count)
+        {
+            visibility = new Visibility[count, 2];
+            for (int i = 0; i < count; i++)
+                for (int j = 0; j < 2; j++)
+                    visibility[i, j] = new Visibility();
+            visiblePairOpaque = new List<MazeCell>();
+            visiblePairTransparent = new List<MazeCell>();
+        }
 
         public void Neighbor(int d, MazeCell m)
         {
@@ -365,38 +393,29 @@ namespace Resphinx.Maze
         {
             float q, s = MazeMap.maze.size, s2 = MazeMap.maze.size / 2;
             float min = MazeMap.maze.size / 15;
-            float rx = p.x % s;
-            float rz = p.z % s;
+            float rx = p.x >= 0 ? p.x % s : (p.x + s) % s;
+            float rz = p.z >= 0 ? p.z % s : (p.z + s) % s;
             rx -= s2;
             rz -= s2;
             rx = Mathf.Abs(rx);
             if (rx > s2) rx = s2;
-            if (rz > s2) rz = s2;
             rz = Mathf.Abs(rz);
-            //   Debug.Log("cango: " + rx + " " + rz);
+            if (rz > s2) rz = s2;
             MazeCell r = this;
-            int varDebug = 0;
-
             if (rx < min && rz < min) r = null;
             else if (rx < min)
             {
                 q = (p.z - position.z + s2) / s;
                 if (p.x < position.x)
                 {
-                    varDebug = 10;
                     if (neighbors[0, 0] != null && allowPass[0, 0])
                     {
-                        varDebug = 11;
                         if (q > opening[0, 0].x && q < opening[0, 0].y)
                         {
-                            //          Debug.Log(q + ", " + opening[0, 0].ToString());
                             if (Mathf.Abs(p.x - position.x) > s2) r = neighbors[0, 0];
                         }
                         else
-                        {
-                            //            Debug.Log(q + " " + Mathf.Abs(p.x - position.x));
                             r = null;
-                        }
 
                     }
                     else
@@ -404,21 +423,14 @@ namespace Resphinx.Maze
                 }
                 else
                 {
-                    varDebug = 20;
                     if (neighbors[0, 1] != null && allowPass[0, 1])
                     {
-                        varDebug = 21;
                         if (q >= opening[0, 1].x && q <= opening[0, 1].y)
                         {
-                            //       Debug.Log(q + ", " + opening[0, 1].ToString());
                             if (Mathf.Abs(p.x - position.x) > s2) r = neighbors[0, 1];
                         }
                         else
-                        {
-                            //        Debug.Log(q + " " + Mathf.Abs(p.x - position.x));
                             r = null;
-                        }
-
                     }
                     else
                         r = null;
@@ -429,52 +441,42 @@ namespace Resphinx.Maze
                 q = (p.x - position.x + s2) / s;
                 if (p.z < position.z)
                 {
-                    varDebug = 31;
                     if (neighbors[1, 0] != null && allowPass[1, 0])
                     {
-                        varDebug = 32;
                         if (q >= opening[1, 0].x && q <= opening[1, 0].y)
                         {
-                            //       Debug.Log(q + ", " + opening[1, 0].ToString());
                             if (Mathf.Abs(p.z - position.z) > s2) r = neighbors[1, 0];
                         }
                         else
-                        {
-                            //         Debug.Log(q + " " + Mathf.Abs(p.z - position.z));
                             r = null;
-                        }
                     }
                     else
                         r = null;
                 }
                 else
                 {
-                    varDebug = 40;
                     if (neighbors[1, 1] != null && allowPass[1, 1])
                     {
-                        varDebug = 41;
                         if (q >= opening[1, 1].x && q <= opening[1, 1].y)
                         {
-                            //   Debug.Log(q + ", " + opening[1, 1].ToString());
                             if (Mathf.Abs(p.z - position.z) > s2) r = neighbors[1, 1];
                         }
                         else
-                        {
-                            //    Debug.Log(q + " " + Mathf.Abs(p.z - position.z));
                             r = null;
-                        }
-
                     }
                     else
                         r = null;
                 }
             }
-            if (r == null) Debug.Log("cango: " + ijk.ToString() + " " + varDebug + " " + rx + ", " + rz);
-            return r;
+          return r;
         }
         public void EnterCell(bool checkShape)
         {
-            MazeMap.maze.vision.levels[z].Apply(this);
+            MazeMap.maze.vision.levels[z].Apply(this, Mazer.Instance.currentVisionOffset);
+        }
+        public void LeaveCell()
+        {
+            //          MazeMap.maze.vision.levels[z].Apply(this);
         }
         public void ReviveShape()
         {

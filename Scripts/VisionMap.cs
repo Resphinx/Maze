@@ -107,8 +107,10 @@ namespace Resphinx.Maze
                     VisionMap.currentCellIndex = j * maze.cols + i;
                     if (maze.cells[i, j, level].situation != PairSituation.Undefined && maze.cells[i, j, level].situation != PairSituation.Void)
                     {
-                        if (raycast) VisionRayCast(maze.cells[i, j, level], growOffset);
-                        else VisionAround(maze.cells[i, j, level], growOffset);
+                        maze.cells[i, j, level].InitializeVisibility(all.Count);
+                        for (int k = 0; k < 2; k++)
+                            if (raycast) VisionRayCast(maze.cells[i, j, level], k == 1, growOffset);
+                            else VisionAround(maze.cells[i, j, level], k == 1, growOffset);
                     }
                 }
         }
@@ -158,151 +160,168 @@ namespace Resphinx.Maze
             }
             return vs;
         }
-        bool GrowVisible(Visibility[] current, int x, int y, int grow)
+
+        Visibility FloorVisibility(MazeCell cell, int x, int y, bool transparency)
         {
-            for (int i = x - grow; i <= x + grow; i++)
-                for (int j = y - grow; j <= y + grow; j++)
-                    if (x != i || y != j)
-                        if (i >= 0 && j >= 0 && i < maze.cols && j < maze.rows)
-                            if (floor[i, j] >= 0)
-                                if (current[floor[i, j]] == Visibility.Visible)
-                                    return true;
-            return false;
-        }
-        bool FloorVisibility(MazeCell cell, int x, int y)
-        {
+            int index = transparency ? 1 : 0;
+            Visibility v = new Visibility();
             for (int i = 0; i < 4; i++)
             {
                 int x1 = i == 0 ? x + 1 : x;
                 int y1 = i == 1 ? y + 1 : y;
                 if (i % 2 == 0)
                 {
-                    if (openV[x1, y1] >= 0) { if (cell.visibility[openV[x1, y1]] != Visibility.Invisible) return true; }
-                    else if (seeV[x1, y1] >= 0) { if (cell.visibility[seeV[x1, y1]] != Visibility.Invisible) return true; }
+                    if (openV[x1, y1] >= 0) v = Visibility.Min(v, cell.visibility[openV[x1, y1], index]);
+                    else if (seeV[x1, y1] >= 0 && transparency) v = Visibility.Min(v, cell.visibility[seeV[x1, y1], index]);
                 }
                 else
                 {
-                    if (openH[x1, y1] >= 0) { if (cell.visibility[openH[x1, y1]] != Visibility.Invisible) return true; }
-                    else if (seeH[x1, y1] >= 0) { if (cell.visibility[seeH[x1, y1]] != Visibility.Invisible) return true; }
+                    if (openH[x1, y1] >= 0) v = Visibility.Min(v, cell.visibility[openH[x1, y1], index]);
+                    else if (seeH[x1, y1] >= 0 && transparency) v = Visibility.Min(v, cell.visibility[seeH[x1, y1], index]);
                 }
             }
-            return false;
+            return v;
         }
 
 
-        void VisionRayCast(MazeCell cell, int growOffset = 0)
+        void VisionRayCast(MazeCell cell, bool transparency, int maxOffset)
         {
-            cell.visibility = new Visibility[all.Count];
-            cell.visiblePair = new List<MazeCell>();
-            for (int i = 0; i < cell.visibility.Length; i++) cell.visibility[i] = Visibility.Invisible;
+            int index = transparency ? 1 : 0;
+            List<MazeCell> pair = transparency ? cell.visiblePairTransparent : cell.visiblePairOpaque;
 
-            if (floor[cell.x, cell.y] >= 0) cell.visibility[floor[cell.x, cell.y]] = Visibility.Visible;
+            if (floor[cell.x, cell.y] >= 0) cell.visibility[floor[cell.x, cell.y], index] = Visibility.Visible;
 
             if (cell.pairStart >= 0)
             {
                 if (cell.pairEnding)
                 {
-                    if (cell.z != cell.otherSide.z) cell.visiblePair.Add(cell.otherSide);
+                    if (cell.z != cell.otherSide.z) pair.Add(cell.otherSide);
                 }
                 else
                 {
-                    cell.visiblePair.Add(MazeMap.maze.pairs[cell.pairStart]);
-                    cell.visiblePair.Add(MazeMap.maze.pairs[cell.pairStart + cell.pairCount-1]);
-                    for (int i = 0; i < all.Count; i++) if (alwaysVisible[i]) cell.visibility[i] = Visibility.Visible;
-                    return;
+                    pair.Add(MazeMap.maze.pairs[cell.pairStart]);
+                    pair.Add(MazeMap.maze.pairs[cell.pairStart + cell.pairCount - 1]);
+               //      return;
                 }
             }
             for (int d = 0; d < 4; d++)
             {
+                Visibility visibility = new Visibility() { offset = 1 };
                 int x = d == 0 ? cell.x + 1 : cell.x;
                 int y = d == 1 ? cell.y + 1 : cell.y;
-                if (d % 2 == 0) if (seeV[x, y] < 0 && openV[x, y] < 0) continue;
-                if (d % 2 == 1) if (seeH[x, y] < 0 && openH[x, y] < 0) continue;
-
-                for (int i = 0; i < PointCount; i++)
+                if (d % 2 == 0)
                 {
-                    Vector2 p = new Vector2(cell.x + povs[d][i].x, cell.y + povs[d][i].y);
-                    for (int j = 0; j <= AngleStepCount; j++)
-                        Vision(cell, x, y, d, p, rays[d][j]);
+                    if (openV[x, y] >= 0 || (transparency && seeV[x, y] >= 0)) { visibility.visible = true; visibility.offset = 0; }
                 }
+                else if (openH[x, y] >= 0 || (transparency && seeH[x, y] >= 0)) { visibility.visible = true; visibility.offset = 0; }
+
+                if (visibility.offset <= maxOffset)
+                    for (int i = 0; i < PointCount; i++)
+                    {
+                        Vector2 p = new Vector2(cell.x + povs[d][i].x, cell.y + povs[d][i].y);
+                        for (int j = 0; j <= AngleStepCount; j++)
+                            RayCast(cell, x, y, d, p, rays[d][j], visibility, maxOffset, transparency);
+                    }
             }
-            Vis(cell, cell);
+
+            ShowCell(cell, cell, 0, index);
 
             for (int i = 0; i < maze.cols; i++)
                 for (int j = 0; j < maze.rows; j++)
                     if (i != cell.x || j != cell.y)
-                        if (FloorVisibility(cell, i, j))
-                        {
-                            if (floor[i, j] >= 0) cell.visibility[floor[i, j]] = Visibility.Visible;
+                    {
+                        Visibility v = FloorVisibility(cell, i, j, transparency);
+                        if (floor[i, j] >= 0)                            cell.visibility[floor[i, j], index] = v;                        
+                        if (v.visible)
                             if (maze.cells[i, j, level].pairEnding && maze.cells[i, j, level].pairIndex != cell.pairIndex)
-                                cell.visiblePair.Add(maze.cells[i, j, level].otherSide);
-                        }
-
-        
-
-            Visibility[] current = new Visibility[all.Count];
-            cell.visibility.CopyTo(current, 0);
-            bool vis;
+                                pair.Add(maze.cells[i, j, level].otherSide);
+                        //TODO add transparency to pairs
+                    }
             for (int i = 0; i < maze.cols; i++)
                 for (int j = 0; j < maze.rows; j++)
-                {
-                    int fi = floor[i, j];
-                    if (fi >= 0)
-                    {
-                        vis = current[fi] == Visibility.Visible;
-                        if (!vis)
-                            if (vis = GrowVisible(current, i, j, growOffset))
-                                cell.visibility[fi] = Visibility.Visible;
-                        if (vis) Vis(cell, MazeMap.maze.cells[i, j, level]);
+                    if (i != cell.x || j != cell.y)
+                        if (floor[i, j] >= 0)
+                        {
+                            Visibility v = cell.visibility[floor[i, j], index];
+                            ShowCell(cell, maze.cells[i, j, level], v.offset, index);
+                        }
 
-                    }
-                }
-
-            for (int i = 0; i < all.Count; i++) if (alwaysVisible[i]) cell.visibility[i] = Visibility.Visible;
         }
-        void VisionAround(MazeCell cell, int growOffset = 0)
+      
+        void VisionAround(MazeCell cell, bool transparency, int maxOffset)
         {
-            cell.visibility = new Visibility[all.Count];
-            cell.visiblePair = new List<MazeCell>();
-            for (int i = 0; i < cell.visibility.Length; i++) cell.visibility[i] = Visibility.Invisible;
-
-            //   if (floor[cell.x, cell.y] >= 0) cell.visibility[floor[cell.x, cell.y]] = Visibility.Visible;
-            //  if (cell.pair != null) if (cell.pair.z != level) cell.visiblePair.Add(cell.pair);
-
-            for (int i = cell.x - growOffset; i <= cell.x + growOffset; i++)
-                for (int j = cell.y - growOffset; j <= cell.y + growOffset; j++)
+            int index = transparency ? 1 : 0;
+            for (int i = cell.x - maxOffset; i <= cell.x + maxOffset; i++)
+                for (int j = cell.y - maxOffset; j <= cell.y + maxOffset; j++)
                 {
                     if (i < maze.cols && j < maze.rows && i >= 0 && j >= 0)
                     {
-                        if (floor[i, j] >= 0) cell.visibility[floor[i, j]] = Visibility.Visible;
-                        Vis(cell, MazeMap.maze.cells[i, j, level]);
+                        int offset = Mathf.Max(Mathf.Abs(i - cell.x), Mathf.Abs(j - cell.y));
+                        if (floor[i, j] >= 0) cell.visibility[floor[i, j], index] = new Visibility() {  offset = offset };
+               //         ShowCell(cell, MazeMap.maze.cells[i, j, level], offset, index);
                     }
                 }
+            for (int i = cell.x - maxOffset; i <= cell.x + maxOffset; i++)
+                for (int j = cell.y - maxOffset; j <= cell.y + maxOffset; j++)
+                {
+                    if (i < maze.cols && j < maze.rows && i >= 0 && j >= 0)
+                    {
+                        int offset = Mathf.Max(Mathf.Abs(i - cell.x), Mathf.Abs(j - cell.y));
+                        ShowCell(cell, MazeMap.maze.cells[i, j, level], offset, index);
+                    }
+                }
+            if (floor[cell.x, cell.y] >= 0) cell.visibility[floor[cell.x, cell.y], index] = Visibility.Visible;
+            for (int i = 0; i < all.Count; i++) if (alwaysVisible[i]) cell.visibility[i, index] = Visibility.Visible;
         }
-        bool Vis(MazeCell cell, int i, int j, int[,] open, int[,] wall, int[,] see)
+        void RayVisiblity(MazeCell cell, int i, int j, int[,] open, int[,] wall, int[,] see, Visibility ray, bool t)
         {
-            if (open[i, j] >= 0) cell.visibility[open[i, j]] = Visibility.Visible;
-            if (see[i, j] >= 0)
+            Visibility visibility;
+            int index = t ? 1 : 0;
+            int k = -1;
+            bool hitWall = false;
+            if (open[i, j] >= 0) k = open[i, j];
+            else if (see[i, j] >= 0 && t) k = see[i, j];
+            else if (wall[i, j] >= 0) { k = wall[i, j]; hitWall = true; }
+            if (k >= 0)
             {
-                cell.visibility[see[i, j]] = Visibility.Transparent;
-                cell.visibility[wall[i, j]] = Visibility.Opaque;
+                visibility = cell.visibility[k, index];
+                if (!visibility.visible && !ray.visible) if (visibility.offset > ray.offset) visibility.offset = ray.offset;
+                if (!visibility.visible && ray.visible) { visibility.visible = true; visibility.offset = 0; }
             }
-            else if (wall[i, j] >= 0) { cell.visibility[wall[i, j]] = Visibility.Visible; return true; }
-            return false;
+            if (hitWall)
+            {
+                ray.visible = false;
+                ray.offset++;
+            }
         }
-        void Vis(MazeCell cell, MazeCell mc)
+        void ShowItem(MazeCell cell, int i, int j, int[,] open, int[,] wall, int[,] see, int offset, int index)
+        {
+            Visibility vis;
+            int w = -1;
+            if (open == null) w = col[i, j];
+            else if (open[i, j] >= 0) w = open[i, j];
+            else if (see[i, j] >= 0 && index == 1) w = see[i, j];
+            else if (wall[i, j] >= 0) w = wall[i, j];
+            if (w >= 0)
+            {
+                vis = cell.visibility[w, index];
+                if (offset == 0) { vis.visible = true; vis.offset = 0; }
+                else if (!vis.visible || vis.offset > offset) { vis.offset = offset; }
+            }
+        }
+        void ShowCell(MazeCell cell, MazeCell mc, int offset, int index)
         {
             for (int m = 0; m < 4; m++)
             {
                 Vector2Int v = mc.around[m + 4];
-                if (col[v.x, v.y] >= 0) cell.visibility[col[v.x, v.y]] = Visibility.Visible;
+                ShowItem(cell, v.x, v.y, null, null, null, offset, index);
                 v = mc.around[m];
-                if (m % 2 == 0) Vis(cell, v.x, v.y, openH, wallH, seeH);
-                else Vis(cell, v.x, v.y, openV, wallV, seeV);
+                if (m % 2 == 0) ShowItem(cell, v.x, v.y, openH, wallH, seeH, offset, index);
+                else ShowItem(cell, v.x, v.y, openV, wallV, seeV, offset, index);
             }
 
         }
-        void Vision(MazeCell cell, int x, int y, int d, Vector2 p, Vector2 ray)
+        void RayCast(MazeCell cell, int x, int y, int d, Vector2 p, Vector2 ray, Visibility vis, int maxOffset, bool transparency)
         {
             float lastM = 0.03f;
             int i = x;
@@ -312,7 +331,7 @@ namespace Resphinx.Maze
             int dx = ray.x < 0 ? -1 : 1, dy = ray.y < 0 ? -1 : 1;
             float m, n, m0, m1, n0, n1;
             bool vertical = d % 2 == 0;
-
+            Visibility lastVis = new Visibility(vis);
             while (true)
             {
                 if (ray.x != 0 && ray.y != 0)
@@ -351,78 +370,81 @@ namespace Resphinx.Maze
                     i += dx;
                     vertical = true;
                 }
-                bool breakLoop;
+                //        bool breakLoop;
                 if (vertical && (i < 0 || i > maze.cols || j < 0 || j >= maze.rows)) break;
                 else if (!vertical && (i < 0 || i >= maze.cols || j < 0 || j > maze.rows)) break;
                 else
                 {
-                    if (vertical) breakLoop = Vis(cell, i, j, openV, wallV, seeV);
-                    else breakLoop = Vis(cell, i, j, openH, wallH, seeH);
-                    if (breakLoop) break;
+                    if (vertical) RayVisiblity(cell, i, j, openV, wallV, seeV, lastVis, transparency);
+                    else RayVisiblity(cell, i, j, openH, wallH, seeH, lastVis, transparency);
+                    if (!lastVis.visible && lastVis.offset > maxOffset) break;
                 }
             }
         }
-        public void Show(MazeCell cell, bool show)
+        public void Show(MazeCell cell, bool show, int offset = 0)
         {
             bool active;
             int hid = 0;
             if (cell != null)
                 for (int i = 0; i < all.Count; i++)
                 {
-                    if (cell.visibility[i] == Visibility.Visible) active = show;
-                    else if (cell.visibility[i] == Visibility.Transparent) active = maze.transparency && show;
-                    else if (cell.visibility[i] == Visibility.Opaque) active = !maze.transparency && show;
-                    else active = !show;
-                    if (show == active && lastState[i]!=active) { all[i].SetActive(active); lastState[i] = active; if (!active) hid++; }
-                   
-
+                    Visibility v = cell.visibility[i, maze.transparency ? 0 : 1];
+                    if (v.visible) active = show;
+                    else active = v.offset <= offset ? show : false;
+                    if (show == active && lastState[i] != active) { all[i].SetActive(active); lastState[i] = active; if (!active) hid++; }
                 }
-          }
-        public void Apply(MazeCell cell, bool considerLevel = true)
+        }
+        public void Apply(MazeCell cell, int offset, bool considerLevel = true)
         {
             string s = cell.ijk.ToString();
 
-            float inv = 0, vis = 0, totVis = 0;
+            float inv = 0, vis = 0, totVis = 0, byoffset = 0;
             bool active;
             for (int i = 0; i < all.Count; i++)
             {
-                if (cell.visibility[i] == Visibility.Visible) active = true;
-                else if (cell.visibility[i] == Visibility.Transparent) active = maze.transparency;
-                else if (cell.visibility[i] == Visibility.Opaque) active = !maze.transparency;
-                else { active = false; }
+                Visibility v = cell.visibility[i, maze.transparency ? 0 : 1];
+                if (v.visible) active = true;
+                else { active = v.offset <= offset; if (active) byoffset++; }
 
                 if (lastState[i] != active) { all[i].SetActive(active); lastState[i] = active; inv += active ? 0 : 1; vis += active ? 1 : 0; }
                 totVis += active ? 1 : 0;
             }
-            Debug.Log($"Cell changed to {s} (paired: {!considerLevel}), visible: {totVis} (appeared: {vis}), disappeared: {inv} of total: {all.Count}");
-            if (considerLevel) ApplyOnPairs(cell);
+            Debug.Log($"Cell changed to {s} (paired: {!considerLevel}), visible: {totVis} (appeared: {vis}), disappeared: {byoffset} of total: {all.Count}");
+            if (considerLevel) ApplyOnPairs(cell, 0);
 
         }
-        public void RemoveTransparency(MazeCell cell, bool considerLevel = true)
+        public void RemoveTransparency(MazeCell cell, int offset = 0, bool considerLevel = true)
         {
             for (int i = 0; i < all.Count; i++)
             {
-                if (cell.visibility[i] == Visibility.Transparent) { if (lastState[i]) all[i].SetActive(lastState[i] = false); }
-                else if (cell.visibility[i] == Visibility.Opaque) { if (!lastState[i]) all[i].SetActive(lastState[i] = true); }
+                Visibility op = cell.visibility[i, 0];
+                Visibility tr = cell.visibility[i, 1];
+                if (tr.visible || tr.offset <= offset)
+                {
+                    if (!op.visible && op.offset > offset)
+                        if (lastState[i]) all[i].SetActive(lastState[i] = false);
+                }
+                else if (op.visible || op.offset <= offset)
+                    if (!lastState[i]) all[i].SetActive(lastState[i] = true);
             }
-            if (considerLevel && cell.pairIndex >= 0) RemoveTransparency(cell, false);
+            if (considerLevel && cell.pairIndex >= 0) RemoveTransparency(cell, offset, false);
         }
-        void ApplyOnPairs(MazeCell cell)
+        void ApplyOnPairs(MazeCell cell, int offset)
         {
-             bool[] levelVisibility = new bool[MazeMap.maze.levelRoot.Length];
+            bool[] levelVisibility = new bool[MazeMap.maze.levelRoot.Length];
             levelVisibility[level] = true;
             int z;
             MazeCell pair;
-            for (int i = 0; i < cell.visiblePair.Count; i++)
+            for (int i = 0; i < cell.visiblePairOpaque.Count; i++)
             {
-                pair = cell.visiblePair[i];
+                pair = cell.visiblePairOpaque[i];
                 z = pair.z;
                 if (levelVisibility[z])
-                    maze.vision.levels[z].Show(pair, true);
+                    maze.vision.levels[z].Show(pair, true, offset);
                 else
                 {
                     levelVisibility[z] = true;
-                     maze.vision.levels[z].Apply(pair, false);
+                    maze.vision.levels[z].Apply(pair, offset, false);
                 }
 
             }
@@ -431,6 +453,7 @@ namespace Resphinx.Maze
                 {
                     MazeMap.maze.levelRoot[i].SetActive(levelVisibility[i]);
                     MazeMap.maze.vision.levels[i].levelActive = levelVisibility[i];
+                    Debug.Log("level " + i + " " + levelVisibility[i]);
                 }
         }
 

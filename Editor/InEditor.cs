@@ -8,8 +8,8 @@ public class ModelCountEditor : Editor
     SerializedProperty count;
     SerializedProperty edge;
     SerializedProperty corner;
-    SerializedProperty paired;
-    SerializedProperty vertical;
+    SerializedProperty length;
+    SerializedProperty height;
     SerializedProperty positions;
     SerializedProperty directions;
     SerializedProperty wallType;
@@ -28,8 +28,8 @@ public class ModelCountEditor : Editor
         count = serializedObject.FindProperty("count");
         edge = serializedObject.FindProperty("edge");
         corner = serializedObject.FindProperty("corner");
-        paired = serializedObject.FindProperty("paired");
-        vertical = serializedObject.FindProperty("vertical");
+        length = serializedObject.FindProperty("length");
+        height = serializedObject.FindProperty("height");
         positions = serializedObject.FindProperty("positions");
         directions = serializedObject.FindProperty("directions");
         wallType = serializedObject.FindProperty("wallType");
@@ -61,7 +61,7 @@ public class ModelCountEditor : Editor
             EditorGUILayout.PropertyField(rotatable);
             EditorGUILayout.PropertyField(switchSides);
 
-            if (m.wallType ==Resphinx. Maze.WallType.Open)
+            if (m.wallType == Resphinx.Maze.WallType.Open)
             {
                 EditorGUILayout.PropertyField(opening);
                 EditorGUILayout.PropertyField(mirrored);
@@ -71,10 +71,11 @@ public class ModelCountEditor : Editor
         else if (m.type == Resphinx.Maze.ModelType.Floor)
         {
             m.switchSides = false;
-            EditorGUILayout.PropertyField(paired);
-            if (m.paired)
+            EditorGUILayout.PropertyField(length);
+            if (m.length < 1) m.length = 1;
+            if (m.length > 1)
             {
-                EditorGUILayout.PropertyField(vertical);
+                EditorGUILayout.PropertyField(height);
                 EditorGUILayout.PropertyField(rotatable);
                 EditorGUILayout.PropertyField(positions);
                 EditorGUILayout.PropertyField(directions);

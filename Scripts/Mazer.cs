@@ -8,7 +8,7 @@ using UnityEngine;
 namespace Resphinx.Maze
 {
     public enum MovementMode { Normal, Dash }
-    public enum DashMode { Forward, Up, Down }
+    public enum DashMode {Right, Forward,Left,Back,  Look, Up, Down,  }
     public enum VisionMode { RayCast, Around}
     public class Mazer : MonoBehaviour
     {
@@ -23,16 +23,14 @@ namespace Resphinx.Maze
         public bool rotateCamera = false;
         public float relativeDistance = 2;
         public VisionMode visionMode = VisionMode.Around;
-        public int visionOffset = 0;
-
+        public int maxVisionOffset = 0;
+        public int currentVisionOffset = 0;
         public GameObject prefabRoot, character;
         public ItemID[] mazeItems;
         public MazeMap maze;
         public MazeWalker walker;
-
-        public static MovementMode movementMode = MovementMode.Normal;
-        public static DashMode dashMode;
-
+        
+     
         public static float ActiveTime = 0, MaxTime = 900;
         bool checkingVision;
         public static UserInputs inputs;
@@ -70,7 +68,7 @@ namespace Resphinx.Maze
             VisionMap.calculating = true;
 
             Application.targetFrameRate = 10;
-            maze.SetVision(visionMode== VisionMode.RayCast, visionOffset);
+            maze.SetVision(visionMode== VisionMode.RayCast, maxVisionOffset);
         }
         public void VisionComplete()
         {
@@ -100,25 +98,10 @@ namespace Resphinx.Maze
             
             walker.Update();
 
-            if (UserInputs.Pressed(UserInputs.Dash))
-                if (movementMode != MovementMode.Dash)
-                {
-                    movementMode = MovementMode.Dash;
-                    dashMode = DashMode.Forward;
-                }
-            if (UserInputs.Pressed(UserInputs.Up))
-                if (movementMode != MovementMode.Dash)
-                {
-                    movementMode = MovementMode.Dash;
-                    dashMode = DashMode.Up;
-                }
-            if (UserInputs.Pressed(UserInputs.Down))
-                if (movementMode != MovementMode.Dash)
-                {
-                    movementMode = MovementMode.Dash;
-                    dashMode = DashMode.Down;
-                }
-
+            if (UserInputs.Pressed(UserInputs.Dash)) walker.ActivateDash(DashMode.Look);                
+            if (UserInputs.Pressed(UserInputs.Up)) walker.ActivateDash(DashMode.Up);
+                 if (UserInputs.Pressed(UserInputs.Down))walker.ActivateDash(DashMode.Down);
+           
         }
     }
 }

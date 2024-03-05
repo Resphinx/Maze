@@ -16,6 +16,7 @@ namespace Resphinx.Maze
     {
         //    public bool dashEnabled = false;
         public MazeMap maze;
+        public bool canDash = true;
         public Transform camera, character;
         public Vector3 feet;
         public static float moveSpeed = 2f;
@@ -30,13 +31,14 @@ namespace Resphinx.Maze
         public Color navigationColor = Color.white;
         public static bool mouseTilt = true;
         public static UserInputs inputs;
-      
+        public DashMode dashMode = DashMode.Look;
+        public MovementMode movementMode = MovementMode.Normal;
         public void SetCameraTransform(GameObject player)
         {
             character = player.transform;
             camera = new GameObject("camera base").transform;
             character.transform.parent = camera;
-            character.transform.localPosition = -elevation*Vector3.up;
+            character.transform.localPosition = -elevation * Vector3.up;
             Transform camX = Camera.main.transform;
             camX.SetParent(camera, false);
             if (Mazer.Instance.cameraPosition == CameraPosition.Cell)
@@ -49,7 +51,7 @@ namespace Resphinx.Maze
                 camX.transform.localPosition = Mazer.Instance.relativeDistance * 0.7f * maze.size * (Vector3.up - Vector3.forward);
                 camX.transform.LookAt(character.transform.position - camX.position);
             }
-     //       Debug.Log("set cam: " + camera.position.y);
+            //       Debug.Log("set cam: " + camera.position.y);
         }
         void SetPosition(bool dash)
         {
@@ -58,11 +60,11 @@ namespace Resphinx.Maze
             if (!dash)
                 if (Mazer.Instance.cameraPosition == CameraPosition.Cell)
                 {
-                    camera.position +=  Mathf.Sin(currentBounceAngle) * 0.02f * Vector3.up;
+                    camera.position += Mathf.Sin(currentBounceAngle) * 0.02f * Vector3.up;
                     currentBounceAngle += Time.deltaTime * bounceAngleChange * (1 + (speedBoost - 1) / 2);
                 }
-            
-        //    Debug.Log("set pos: " + camera.position.y);
+
+            //    Debug.Log("set pos: " + camera.position.y);
         }
         public void Update()
         {
@@ -76,7 +78,7 @@ namespace Resphinx.Maze
             Vector3 dir, fwd3d = new Vector3(character.forward.x, 0, character.forward.z).normalized;
 
             bool rightTurn, foreMove;
-            switch (Mazer.movementMode)
+            switch (movementMode)
             {
                 case MovementMode.Normal:
                     if ((foreMove = UserInputs.Hold(UserInputs.Forward)) || UserInputs.Hold(UserInputs.Back))
@@ -87,6 +89,7 @@ namespace Resphinx.Maze
                         {
                             lastCell = currentCell;
                             currentCell = nextCell;
+                            lastCell.LeaveCell();
                             currentCell.EnterCell(true);
                         }
                         feet = next;
@@ -99,49 +102,25 @@ namespace Resphinx.Maze
                     }
                     break;
                 case MovementMode.Dash:
-                    switch (dasher.dashing)
+                    if (dasher.dashing == DashStatus.Dashing)
                     {
-                        case DashStatus.None:
-                            if (Mazer.dashMode == DashMode.Forward)
+                        bool dashFinalized = dasher.Update(Time.deltaTime);
+                        feet = dasher.position;
+                        SetPosition(true);
+                        if (dashFinalized)
+                        {
+                            dasher.dashing = DashStatus.None;
+                            movementMode = MovementMode.Normal;
+                            if (dasher.destination.z != currentCell.z)
                             {
-                                if (DashDirection(fwd3d, currentCell, out MazeCell m))
-                                {
-                                    dasher.Init(feet, m, dashTime);
-                                    maze.vision.levels[m.z].Show(m, true);
-                                }
-                                else
-                                    Mazer.movementMode = MovementMode.Normal;
+                                maze.vision.levels[lastCell.z].Show(lastCell, false);
+                                maze.vision.levels[dasher.destination.z].Show(dasher.destination, true);
                             }
-                            else
-                            {
-                                if (DashDirection(currentCell, out MazeCell m))
-                                {
-                                    dasher.Init(feet, m, dashTime);
-                                    maze.vision.levels[m.z].Show(m, true);
-                                }
-                                else
-                                    Mazer.movementMode = MovementMode.Normal;
-                            }
-                            break;
-                        case DashStatus.Dashing:
-                            bool dashFinalized = dasher.Update(Time.deltaTime);
-                            feet = dasher.position;
-                            SetPosition(true);
-                            if (dashFinalized)
-                            {
-                                dasher.dashing = DashStatus.None;
-                                Mazer.movementMode = MovementMode.Normal;
-                                if (dasher.destination.z != currentCell.z)
-                                {
-                                    maze.vision.levels[lastCell.z].Show(lastCell, false);
-                                    maze.vision.levels[dasher.destination.z].Show(dasher.destination, true);
-                                }
-                                else
-                                    lastCell = currentCell;
-                                currentCell = dasher.destination;
-                                currentCell.EnterCell(false);
-                            }
-                            break;
+                            lastCell = currentCell;
+                            lastCell.LeaveCell();
+                            currentCell = dasher.destination;
+                            currentCell.EnterCell(false);
+                        }
                     }
                     break;
             }
@@ -176,10 +155,10 @@ namespace Resphinx.Maze
         {
             feet = new Vector3(x * maze.size, z * maze.height, y * maze.size);
             camera.position = feet + elevation * Vector3.up;
-       //     Debug.Log("set cell: " + camera.position.y);
+            //     Debug.Log("set cell: " + camera.position.y);
             currentCell = maze.cells[x, y, z];
             lastCell = currentCell;
-            maze.vision.levels[z].Apply(currentCell);
+            maze.vision.levels[z].Apply(currentCell , Mazer.Instance.currentVisionOffset);
         }
         bool DashDirection(Vector3 u, MazeCell cell, out MazeCell md)
         {
@@ -210,7 +189,7 @@ namespace Resphinx.Maze
         }
         bool DashDirection(MazeCell cell, out MazeCell md)
         {
-            int level = cell.z + (Mazer.dashMode == DashMode.Up ? 1 : -1);
+            int level = cell.z + (dashMode == DashMode.Up ? 1 : -1);
             md = null;
             if (level >= 0 && level < maze.levels)
                 if (maze.cells[cell.x, cell.y, level] != null)
@@ -250,5 +229,46 @@ namespace Resphinx.Maze
                 return new Vector3(camera.forward.x, 0, camera.forward.z);
             }
         }
+        public void ActivateDash(DashMode mode)
+        {
+            if (movementMode != MovementMode.Dash && dasher.dashing == DashStatus.None)
+            {
+                movementMode = MovementMode.Dash;
+                dashMode = mode;
+                Vector3 v = Vector3.zero;
+                bool horizontal = true;
+                switch (dashMode)
+                {
+                    case DashMode.Look:
+                        v = Mazer.Instance.cameraPosition == CameraPosition.Above && !Mazer.Instance.rotateCamera ? character.transform.forward : camera.transform.forward;
+                        break;
+                    case DashMode.Right: v = Vector3.forward; break;
+                    case DashMode.Forward: v = Vector3.right; break;
+                    case DashMode.Left: v = Vector3.left; break;
+                    case DashMode.Back: v = Vector3.back; break;
+                    case DashMode.Down: horizontal = false; break;
+                    case DashMode.Up: horizontal = false; break;
+                }
+                movementMode = MovementMode.Normal;
+                if (horizontal)
+                {
+                    if (DashDirection(v, currentCell, out MazeCell m))
+                    {
+                        dasher.Init(feet, m, dashTime);
+                        maze.vision.levels[m.z].Show(m, true);
+                        movementMode = MovementMode.Dash;
+                    }
+                }
+                else if (DashDirection(currentCell, out MazeCell m))
+                {
+                    dasher.Init(feet, m, dashTime);
+                    maze.vision.levels[m.z].Show(m, true);
+                    movementMode = MovementMode.Dash;
+                }
+
+            }
+
+        }
     }
 }
+

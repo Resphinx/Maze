@@ -62,6 +62,7 @@ namespace Resphinx.Maze
 
         public void SetPrefabs(GameObject root)
         {
+            MazeElements me = root.GetComponent<MazeElements>();
             structure = root;
             PrefabManager pm;
             prefabClone = new GameObject("prefabs");
@@ -69,29 +70,35 @@ namespace Resphinx.Maze
             vision.AddItem(prefabClone);
             int cc = root.transform.childCount;
             for (int i = 0; i < cc; i++)
-            {
-                pm = null;
-                GameObject go = root.transform.transform.GetChild(i).gameObject;
-                PrefabSettings mc = go.GetComponent<PrefabSettings>();
-                if (mc != null)
-                    switch (mc.type)
-                    {
-                        case ModelType.Wall:
-                            if (mc.wallType == WallType.Closed) wallPrefabs.Add(PrefabManager.CreateQuadro("wall", go));
-                            else if (mc.wallType == WallType.Open) openPrefabs.Add(PrefabManager.CreateQuadro("open", go));
-                            else seePrefabs.Add(PrefabManager.CreateQuadro("see", go));
-                            break;
-                        case ModelType.Column:
-                            columnPrefabs.Add(PrefabManager.CreateRandom("columns", go));
-                            break;
-                        case ModelType.Floor:
-                            floorPrefabs.Add(PrefabManager.CreateRandom("floor", go));
-                            break;
-                        case ModelType.Item:
-                            itemManager.AddItem(go);
-                            break;
-                    }
-            }
+                GetElement(root.transform.transform.GetChild(i).gameObject);
+
+            if (me != null)
+                for (int i = 0; i < me.items.Length; i++)
+                    GetElement(me.items[i]);
+
+
+        }
+        void GetElement(GameObject go)
+        {
+            PrefabSettings mc = go.GetComponent<PrefabSettings>();
+            if (mc != null)
+                switch (mc.type)
+                {
+                    case ModelType.Wall:
+                        if (mc.wallType == WallType.Closed) wallPrefabs.Add(PrefabManager.CreateQuadro("wall", go));
+                        else if (mc.wallType == WallType.Open) openPrefabs.Add(PrefabManager.CreateQuadro("open", go));
+                        else seePrefabs.Add(PrefabManager.CreateQuadro("see", go));
+                        break;
+                    case ModelType.Column:
+                        columnPrefabs.Add(PrefabManager.CreateRandom("columns", go));
+                        break;
+                    case ModelType.Floor:
+                        floorPrefabs.Add(PrefabManager.CreateRandom("floor", go));
+                        break;
+                    case ModelType.Item:
+                        itemManager.AddItem(go);
+                        break;
+                }
         }
         public void DestroyEverything()
         {
@@ -306,7 +313,7 @@ namespace Resphinx.Maze
                 for (int n = 0; n < rows; n++)
                     if (cells[m, n, lev] == null)
                         cells[m, n, lev] = MazeCell.Void(m, n, lev);
-            }
+        }
         void CreatePair(PrefabManager pm)
         {
             if (pm.settings.height != 0)
@@ -445,6 +452,7 @@ namespace Resphinx.Maze
                             }
                             // items
                             cells[i, j, k].items = new GameObject[itemManager.ids.Length];
+                            cells[i, j, k].itemRotation = new int[itemManager.ids.Length];
                             for (int itemIndex = 0; itemIndex < itemManager.ids.Length; itemIndex++)
                                 if (UnityEngine.Random.value < itemManager.ids[itemIndex].chance)
                                 {
@@ -454,6 +462,7 @@ namespace Resphinx.Maze
                                     {
                                         go.name = $"item {itemIndex} ({i},{j},{k})";
                                         cells[i, j, k].items[itemIndex] = go;
+                                        cells[i, j, k].itemRotation[itemIndex] = cr.sideIndex;
                                     }
                                 }
                         }
