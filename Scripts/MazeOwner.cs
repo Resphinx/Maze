@@ -10,7 +10,7 @@ namespace Resphinx.Maze
     public enum MovementMode { Normal, Dash }
     public enum DashMode { Right, Forward, Left, Back, Look, Up, Down, }
     public enum VisionMode { RayCast, Around }
-    public class Mazer : MonoBehaviour
+    public class MazeOwner : MonoBehaviour
     {
          public float size, height;
         public static bool inGame = false, paused = false;
