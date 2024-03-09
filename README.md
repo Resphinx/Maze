@@ -25,9 +25,13 @@ You can either import it as the package or via the source code. To use the maze 
 # Major change log
 [07/03/24]
 Removed: Visibility class; instead a simple byte is used for item visibility (stored in MazeCell.offset).
+
 Added: Changing view mode (point of view) via MazeWalker.SetView method.
+
 Added: Changing between mazes via MazeManager.ChangeMaze method.
+
 09/03/24	
+
 Added: wider bundled cells (replaced pairs).
 Added: VisiblePair class (will be renamed).
 # Future todos
