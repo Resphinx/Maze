@@ -22,7 +22,7 @@ You can either import it as the package or via the source code. To use the maze 
 5. When a maze is created, a Vision Map is also claculated for it that by default, contains only elements that are visible from each cell or around it (depending on <i>visionOffsetMode</i> of MazeOwner component). While this works well for 1st person views, it may lack intuitiveness for 3rd person views. You can increase the offset of the view by the <i>Max Vision Offset</i> of MazeOwner component. The vision map will be applied to the value of <i>Current Vision Map</i> (automatically enforced when you enter a new cell).
 # Known bugs which will be fixed:
 1. For limited open walls (with another Opening value than 0,1) may cause the player stick in the walls if entered from certain angles.
-#Major change log
+# Major change log
 07/03/24
 Removed: Visibility class; instead a simple byte is used for item visibility (stored in MazeCell.offset).
 Added: Changing view mode (point of view) via MazeWalker.SetView method.
