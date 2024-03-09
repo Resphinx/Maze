@@ -23,7 +23,7 @@ You can either import it as the package or via the source code. To use the maze 
 # Known bugs which will be fixed:
 1. For limited open walls (with another Opening value than 0,1) may cause the player stick in the walls if entered from certain angles.
 # Major change log
-07/03/24
+[07/03/24]
 Removed: Visibility class; instead a simple byte is used for item visibility (stored in MazeCell.offset).
 Added: Changing view mode (point of view) via MazeWalker.SetView method.
 Added: Changing between mazes via MazeManager.ChangeMaze method.
