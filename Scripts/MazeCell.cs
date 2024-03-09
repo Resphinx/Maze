@@ -4,43 +4,36 @@ using System.Collections.Generic;
 using UnityEngine;
 namespace Resphinx.Maze
 {
-    public enum PairSituation { Normal, Handle, Pair, Undefined, Void }
+    /// <summary>
+    /// The situation of a cell in relation to a construct:
+    /// - <see cref="Unbundled"/>: the cell is not part of a bundle.
+    /// - <see cref="Handle"/>: the cell is the handle of a non-void bundle, that is where the floor object is placed.
+    /// - <see cref="Entrance"/>: a navigable cell of a bundle in its first or last row.
+    /// - <see cref="Hanging"/>: a non-navigable cell of a bundle.
+    /// - <see cref="Middle"/>: a navigable cell of a bundle in its middle.
+    /// - <see cref="Void"/>: a non-navigable cell in a void bundle.
+    /// </summary>
+    public enum BundleSituation { Unbundled, Handle, Entrance, Hanging, Middle, Void }
+    /// <summary>
+    /// The type of a cell's connection to other cells.
+    /// - <see cref="Open"/>: the player can pass through the shared side.
+    /// - <see cref="Closed"/>: there is a wall on the shared side that can be passed by dash.
+    /// - <see cref="Penfing"/>: temporary, only used during maze generation.
+    /// - <see cref="Unpassable"/>: like <see cref="Closed"/> but passable by a dash.
+    /// - <see cref="None"/>: No wall prefab shoud be placed there.
+    /// </summary>
     public enum Connection { Open, Closed, Pending, Unpassable, None }
-
-    public class Visibility
-    {
-        public bool visible = false;
-        public int offset = int.MaxValue;
-        public static Visibility Visible = new Visibility() { visible = true };
-        public Visibility() { }
-        public Visibility(Visibility v)
-        {
-            visible = v.visible;
-            offset = v.offset;
-        }
-        public static Visibility Min(Visibility a, Visibility b)
-        {
-            Visibility v = new Visibility();
-            v.offset = Mathf.Min(a.offset, b.offset);
-            if (a.visible || b.visible) v.visible = true;
-            return v;
-        }
-    }
+    /// <summary>
+    /// The class representing a cell in a maze.
+    /// </summary>
     public class MazeCell
     {
         MazeMap maze;
         public int x, y, z, index;
 
-        public int pairStart = -1, pairCount = 0;
-        public bool pairedOnX = true;
-        public int pairDirection = -1;
-        public int pairIndex = 0;
-        public bool pairEnding = false;
-        public MazeCell otherSide = null;
-        float offset, sign;
-        public static float H2S;
+        public CellBundle bundle = null;
 
-        public PairSituation situation = PairSituation.Normal;
+        public BundleSituation situation = BundleSituation.Unbundled;
         public Vector3Int ijk;
         public Vector3 position;
         // the 2x2 arrays bellow are arranged as follows: 
@@ -55,10 +48,8 @@ namespace Resphinx.Maze
         public Connection[,] connection = new Connection[2, 2];
 
         public Vector3 walk = Vector3.right;
-        float factor = 1;
-        Vector3 reference;
 
-        public GameObject floor, shape;
+        public GameObject floor;
         public PrefabManager floorPrefab = null;
         public int shapeIndex = 0;
         public static List<MazeCell> shapeBack = new List<MazeCell>();
@@ -72,8 +63,8 @@ namespace Resphinx.Maze
         public bool[] transWall = new bool[4];
         public GameObject[] items;
         public int[] itemRotation;
-        public Visibility[,] visibility;
-        public List<MazeCell> visiblePairOpaque, visiblePairTransparent;
+        public byte[,] offset, bundleOffset;
+        public bool[] toHandleRow;
         public Vector2Int[] around = new Vector2Int[8];
         //    Vector3[] corners = new Vector3[4];
 
@@ -95,101 +86,126 @@ namespace Resphinx.Maze
                     around[j * 2 + i + 4] = new Vector2Int(x + i, y + j);
                 }
             //        xy = MazeManager.maze.size * new Vector2(x, y);
-            reference = position = maze.size * new Vector3(x, 0, y) + maze.height * new Vector3(0, z, 0);
+            position = maze.size * new Vector3(x, 0, y) + maze.height * new Vector3(0, z, 0);
         }
         public static MazeCell Void(MazeMap map, int x, int y, int z)
         {
             MazeCell cell = new MazeCell(map, x, y, z);
-            cell.situation = PairSituation.Void;
+            cell.situation = BundleSituation.Void;
             return cell;
         }
         const int _o = 0;
         const int _p = 1;
         const int _h = 2;
         const int _v = 3;
-        public static MazeCell[] CreatePath(MazeMap maze, int x, int y, int z, int side, int length, int height)
-        {
-            int[] Xi = new int[length];
-            int[] Yi = new int[length];
-            int[] Zi = new int[length];
 
-            Debug.Log("creating pair...");
+        public static CellBundle FlatBundle(MazeMap maze, int x, int y, int z, int side, int length, int width)
+        {
+            int[,] Xi = new int[length, width];
+            int[,] Yi = new int[length, width];
+
+            //   Debug.Log("creating pair...");
             for (int i = 0; i < length; i++)
-            {
-                Xi[i] = side switch { 0 => x + i * 1, 2 => x - i * 1, _ => x };
-                Yi[i] = side switch { 1 => y + i * 1, 3 => y - i * 1, _ => y };
-                Zi[i] = z + height * (i + 1) / length;
-                //        Debug.Log($"pair {i}: {Xi[i]},{Yi[i]},{Zi[i]}");
-            }
+                for (int j = 0; j < width; j++)
+                {
+                    Xi[i, j] = side switch { 0 => x + i, 1 => x - j, 2 => x - i, _ => x + j };
+                    Yi[i, j] = side switch { 0 => y + j, 1 => y + i, 2 => y - j, _ => y - i };
+                 }
+            // checking validity of the cells
+            int cc = 0;
+            for (int i = 0; i < length; i++)
+                for (int j = 0; j < width; j++)
+
+                    if (maze.InRange(Xi[i, j], Yi[i, j]) && z < maze.levels && z >= 0)
+                        if (maze.cells[Xi[i, j], Yi[i, j], z] == null) cc++;
+            if (cc != length * width) return null;
+            // creating the ramp
+            CellBundle cb = new CellBundle(maze, new MazeCell(maze, x, y, z), side, length, width, 1);
+            cb.handle.bundle = cb;
+            MazeCell mc;
+            for (int i = 0; i < length; i++)
+                for (int j = 0; j < width; j++)
+                {
+                      if (i + j == 0) mc = cb.handle;
+                    else mc = new MazeCell(maze, Xi[i, j], Yi[i, j], z) { bundle = cb };
+                    if (cb.Add(mc, i, j))
+                        maze.bundledCells.Add(mc);
+                }
+            cb.SetNeighbors(side);
+            return cb;
+        }
+        public static CellBundle SlopeBundle(MazeMap maze, int x, int y, int z, int side, int length, int width, int height)
+        {
+            int habs = Mathf.Abs(height) + 1;
+            int dh = height > 0 ? 1 : -1;
+            if (habs == 0) return FlatBundle(maze, x, y, z, side, length, width);
+            int[,,] Xi = new int[length, width, habs];
+            int[,,] Yi = new int[length, width, habs];
+            int[,,] Zi = new int[length, width, habs];
+            int cc = 0;
+            //   Debug.Log("creating pair...");
+            for (int i = 0; i < length; i++)
+                for (int j = 0; j < width; j++)
+                    for (int k = 0; k < habs; k++)
+                    {
+                        Xi[i, j, k] = side switch { 0 => x + i, 1 => x - j, 2 => x - i, _ => x + j };
+                        Yi[i, j, k] = side switch { 0 => y + j, 1 => y + i, 2 => y - j, _ => y - i };
+                        Zi[i, j, k] = z + k * dh;
+                        //        Debug.Log($"pair {i}: {Xi[i]},{Yi[i]},{Zi[i]}");
+                    }
             // checking validity of the cells
             for (int i = 0; i < length; i++)
-                for (int j = 0; j <= height; j++)
-                {
-                    int zj = Zi[i] == z + height ? Zi[i] - j : Zi[i] + j;
-                    if (maze.InRange(Xi[i], Yi[i]) && zj < maze.levels && zj >= 0)
-                        if (maze.cells[Xi[i], Yi[i], zj] != null) return null;
-                }
-            Vector2Int d = Delta(side);
-            if (!maze.InRange(Xi[^1] + d.x, Yi[^1] + d.y)) return null;
-            else if (maze.cells[Xi[^1] + d.x, Yi[^1] + d.y, Zi[^1]] != null) return null;
-            d = Delta(X(side));
-            if (!maze.InRange(Xi[0] + d.x, Yi[0] + d.y)) return null;
-            else if (maze.cells[Xi[0] + d.x, Yi[0] + d.y, Zi[0]] != null) return null;
-
-            // creating the ramp
-            MazeCell[] r = new MazeCell[height == 0 ? length : length * 2];
-            int lastZ = z, nextZ;
-           maze. lastPairIndex++;
-            int pairStart = maze.pairs.Count;
-            for (int i = 0; i < length; i++)
+                for (int j = 0; j < width; j++)
+                    if (maze.InRange(Xi[i, j, 0], Yi[i, j, 0]))
+                        for (int k = 0; k < habs; k++)
+                            if (z + k * dh < maze.levels && z + k * dh >= 0)
+                                if (maze.cells[Xi[i, j, k], Yi[i, j, k], z + k * dh] == null) cc++;
+            if (cc != habs * length * width) return null;
+            Vector2Int d = Delta(side), dx = Delta(X(side));
+            cc = 0;
+            int cc2 = 0;
+            int l1 = length - 1;
+            int h1 = habs - 1;
+            for (int j = 0; j < width; j++)
             {
-                Debug.Log($"pair {i}: {Xi[i]},{Yi[i]},{Zi[i]}");
-                nextZ = i < length - 1 ? Zi[i + 1] : Zi[^1];
-                MazeCell mc = r[i] = new MazeCell(maze, Xi[i], Yi[i], Zi[i]) { pairIndex = maze.lastPairIndex };
-                maze.pairs.Add(mc);
-                mc.situation = i == 0 ? PairSituation.Handle : PairSituation.Pair;
-                mc.Set(X(side), Zi[i] == lastZ ? Connection.Open : Connection.None);
-                mc.Set(side, Zi[i] == nextZ ? Connection.Open : Connection.None);
-                mc.Set(side, height == 0 ? Connection.Closed : Connection.Unpassable, true);
-                lastZ = Zi[i];
-                mc.pairStart = pairStart;
-                mc.pairCount = length;
-                if (i > 0)
-                {
-                    mc.Neighbor(X(side), r[i - 1]);
-                    r[i - 1].Neighbor(side, r[i]);
-                }
-                mc.pairedOnX = side % 2 == 0;
-                mc.pairDirection = side;
-                if (height != 0)
-                    r[i].CalculateWalkVector(side, length, height, r[0]);
-
-                if (height != 0)
-                {
-                    int zj = Zi[i] == z ? z + height : z;
-                    mc = r[length + i] = new MazeCell(maze, Xi[i], Yi[i], zj) { pairIndex = maze.lastPairIndex };
-                    Debug.Log($"void {i}: {Xi[i]},{Yi[i]},{zj}");
-                    mc.situation = PairSituation.Undefined;
-                    mc.Set(side, i == length - 1 ? Connection.Unpassable : Connection.None);
-                    mc.Set(X(side), i == length - 1 ? Connection.Unpassable : Connection.None);
-                    mc.Set(side, Connection.Unpassable, true);
-                }
+                if (maze.InRange(Xi[0, j, 0] + dx.x, Yi[0, j, 0] + dx.y))
+                    if (maze.cells[Xi[0, j, 0] + dx.x, Yi[0, j, 0] + dx.y, z] == null) cc++;
+                if (maze.InRange(Xi[l1, j, h1] + d.x, Yi[l1, j, h1] + d.y))
+                    if (maze.cells[Xi[l1, j, h1] + d.x, Yi[l1, j, h1] + d.y, z] == null) cc2++;
             }
-            r[0].otherSide = r[length - 1];
-            r[length - 1].otherSide = r[0];
-            r[0].pairEnding = r[length - 1].pairEnding = true;
-            Debug.Log("fisished pair..." + r.Length);
-            return r;
+            if (cc == 0 || cc2 == 0) return null;
+            // creating the ramp
+            CellBundle cb = new CellBundle(maze, new MazeCell(maze, x, y, z), side, length, width, height);
+            cb.handle.bundle = cb;
+            MazeCell mc;
+
+            for (int i = 0; i < length; i++)
+                for (int j = 0; j < width; j++)
+                    for (int k = 0; k < habs; k++)
+                    {
+                        //      Debug.Log($"pair {i}: {Xi[i]},{Yi[i]},{Zi[i]}");
+                        if (i + j + k == 0) mc = cb.handle;
+                        else mc = new MazeCell(maze, Xi[i, j, k], Yi[i, j, k], Zi[i, j, k]) { bundle = cb };
+                        cb.Add(mc, i, j, k);
+
+                    }
+            cb.SetNeighbors(side);
+            return cb;
         }
 
-        internal void InitializeVisibility(int count)
+        internal void InitializeVisibility(int count, int bundleCount)
         {
-            visibility = new Visibility[count, 2];
+            offset = new byte[count, 2];
             for (int i = 0; i < count; i++)
                 for (int j = 0; j < 2; j++)
-                    visibility[i, j] = new Visibility();
-            visiblePairOpaque = new List<MazeCell>();
-            visiblePairTransparent = new List<MazeCell>();
+                    offset[i, j] = 255;
+
+            bundleOffset = new byte[bundleCount, 2];
+            toHandleRow = new bool[bundleCount];
+            for (int i = 0; i < bundleCount; i++)
+                for (int j = 0; j < 2; j++)
+                    bundleOffset[i, j] = 255;
+
         }
 
         public void Neighbor(int d, MazeCell m)
@@ -225,6 +241,13 @@ namespace Resphinx.Maze
         {
             Vector2Int d = Delta(dir);
             return Connected(d.x, d.y);
+        }
+        public Connection ConnectionType(int dir)
+        {
+            Vector2Int d = Delta(dir);
+            int a = d.x == 0 ? 1 : 0;
+            int b = a == 0 ? (d.x < 0 ? 0 : 1) : (d.y < 0 ? 0 : 1);
+            return connection[a, b];
         }
 
         public Connection Get(int dir)
@@ -331,64 +354,26 @@ namespace Resphinx.Maze
             return Mathf.Abs(Vector2.Dot(p, u) + c) / u.magnitude;
         }
 
-        public void CalculateWalkVector(int side, int length, int height, MazeCell handle)
-        {
-            float h = height * maze.height;
-            float s = maze.size;
-            reference = side switch
-            {
-                0 => handle.position - s * Vector3.right / 2,
-                1 => handle.position - s * Vector3.forward / 2,
-                2 => handle.position + s * Vector3.right / 2,
-                _ => handle.position + s * Vector3.forward / 2,
-            };
-            walk = side switch
-            {
-                0 => new Vector3(length * s, h, 0),
-                1 => new Vector3(0, h, length * s),
-                2 => new Vector3(-length * s, h, 0),
-                _ => new Vector3(0, h, -length * s),
-            };
-            factor = walk.magnitude / (length * s);
-            Debug.Log("pair vect:" + walk.ToString() + " " + reference.ToString() + " " + factor);
-        }
+
         public Vector3 NextPosition(Vector3 feet, Vector3 u, float speed, float dt)
         {
             Vector3 v = speed * dt * u;
             float dy;
             Vector3 f = feet + v;
-            if (pairStart >= 0 && situation != PairSituation.Undefined)
-            {
-                Vector3 w = f - reference;
-                if (pairedOnX)
-                    dy = w.x / walk.x * walk.y;
-                else
-                    dy = w.z / walk.z * walk.y;
-                return new Vector3(f.x, reference.y + dy, f.z);
-            }
-            else return new Vector3(f.x, position.y, f.z);
+            if (bundle != null && situation != BundleSituation.Hanging)
+                if (bundle.height != 1)
+                {
+                    Vector3 w = f - bundle.reference;
+                    if (bundle.onX)
+                        dy = w.x / bundle.walk.x * bundle.walk.y;
+                    else
+                        dy = w.z / bundle.walk.z * bundle.walk.y;
+                    return new Vector3(f.x, bundle.reference.y + dy, f.z);
+                }
+            return new Vector3(f.x, position.y, f.z);
 
         }
-        public Vector3 AddWalk(Vector3 u, float dt)
-        {
-            if (walk.y != 0)
-            {
-                Vector3 w = walk.normalized;
-                Vector3 v = walk;
-                v.y = 0;
-                float a = Vector3.Angle(u, v);
-                float e = Mathf.Cos(a * Mathf.Deg2Rad);
 
-                float t = w.y / v.magnitude;
-                float vm = e * u.magnitude;
-                float vh = vm * t;
-                return dt * new Vector3(u.x, vh, u.z);
-            }
-            else
-            {
-                return dt * u;
-            }
-        }
 
         public MazeCell CanGo(Vector3 p)
         {
@@ -469,7 +454,7 @@ namespace Resphinx.Maze
                         r = null;
                 }
             }
-          return r;
+            return r;
         }
         public void EnterCell(bool checkShape)
         {
@@ -479,10 +464,9 @@ namespace Resphinx.Maze
         {
             //          maze.vision.levels[z].Apply(this);
         }
-        public void ReviveShape()
+        public Vector3 AddLocalElevation(Vector3 feet)
         {
-            shapeIndex = -shapeIndex;
-            shape.SetActive(true);
+            return feet;
         }
     }
 }

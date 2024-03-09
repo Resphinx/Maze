@@ -53,9 +53,11 @@ namespace Resphinx.Maze
         public const int Esc = 8;
         public const int Up = 9;
         public const int Down = 10;
+        public const int View = 11;
+        public const int Teleport = 12;
 
 
-        public const int Count = 11;
+        public const int Count = 13;
 
         public static bool[] current = new bool[Count];
         public static void InitDefault()
@@ -71,7 +73,9 @@ namespace Resphinx.Maze
             inputs[Pause] = new Input(Keyboard.current.pKey, true);
             inputs[Esc] = new Input(Keyboard.current.escapeKey, true);
             inputs[Up] = new Input(Keyboard.current.qKey, true);
-            inputs[Down] = new Input(Keyboard.current.eKey, true);    
+            inputs[Down] = new Input(Keyboard.current.eKey, true);
+            inputs[View] = new Input(Keyboard.current.fKey, true);
+            inputs[Teleport] = new Input(Keyboard.current.tKey, true);
         }
         public static void Update()
         {

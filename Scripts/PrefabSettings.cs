@@ -13,6 +13,7 @@ namespace Resphinx.Maze
     public enum Vertical { Up, Down, None}
     public enum Sides { X_Positive, Z_Positive, X_Negative,  Z_Negative, None, X, Z}
     public enum ItemWallRelation { OnlyOpen, OnlyClosed, Both}
+    public enum CenterType { CellCenter, SelfCenter}
     public class PrefabSettings : MonoBehaviour
     {
         public ModelType type;
@@ -20,10 +21,11 @@ namespace Resphinx.Maze
         public bool alwaysVisible = false;
         public bool byCount = false;
         public int count = 1;        
+        public CenterType centerType = CenterType.CellCenter;
         public Selector edge = Selector.Both, corner = Selector.Both;
         // floor
-        public bool Paired { get { return length != 1; } }
-        public int length = 1 , height = 0;
+        public bool Bundled { get { return length != 1; } }
+        public int length = 1, width = 1 , height = 0;
         public Vector3Int[] positions;
         public int[] directions;
         // wall 

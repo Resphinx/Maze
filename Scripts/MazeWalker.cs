@@ -11,79 +11,72 @@ namespace Resphinx.Maze
     public enum UIStatus { Home, Play }
     public enum SeekStatus { None, Heart, Tear }
     public enum DashStatus { None, Dashing, Reached }
-    public enum CameraPosition { Cell, Above }
+    public enum CameraPosition { FirstPerson, ThirdPersonRotate, ThirdPersonStatic }
     public class MazeWalker
     {
-        //    public bool dashEnabled = false;
+        public MazePOV view;
         public MazeMap maze;
         public bool canDash = true;
-        public Transform camera, character;
         public Vector3 feet;
-        public  float moveSpeed = 2f;
+        public float moveSpeed = 2f;
         public float dashTime = 0.3f;
         public float turnSpeed = 150;
-        public  float speedBoost = 1;
+        public float speedBoost = 1;
         MazeDasher dasher = new MazeDasher();
         public MazeCell lastCell, currentCell;
         public float elevation = 1.5f;
-        float currentBounceAngle = 0;
-        float bounceAngleChange = Mathf.PI * 3.5f;
         public Color navigationColor = Color.white;
-        public  bool mouseTilt = true;
+        public bool mouseTilt = true;
         public DashMode dashMode = DashMode.Look;
         public MovementMode movementMode = MovementMode.Normal;
-        public void SetCameraTransform(GameObject player)
+
+        public static Transform rotateChild, rotateParent;
+        Vector3 lastForward = Vector3.forward;
+        float lastTilt = 0;
+
+        public static void InitializeRotation()
         {
-            character = player.transform;
-            camera = new GameObject("camera base").transform;
-            character.transform.parent = camera;
-            character.transform.localPosition = -elevation * Vector3.up;
-            Transform camX = Camera.main.transform;
-            camX.SetParent(camera, false);
-            if (maze.owner.cameraPosition == CameraPosition.Cell)
-            {
-                camX.transform.localPosition = Vector3.zero;
-                camX.rotation = Quaternion.identity;
-            }
-            else
-            {
-                camX.transform.localPosition = maze.owner.cameraDistance * 0.7f * maze.size * (Vector3.up - Vector3.forward);
-                camX.transform.LookAt(character.transform.position - camX.position);
-            }
-            //       Debug.Log("set cam: " + camera.position.y);
+            rotateParent = new GameObject("rotation pivot").transform;
+            rotateChild = new GameObject("rotated direction").transform;
+            rotateChild.transform.parent = rotateParent;
+            rotateChild.localPosition = Vector3.forward;
         }
-        void SetPosition(bool dash)
+        public void SetView(MazeMap map, MazePOV pov)
         {
-            camera.position = feet;
-            camera.position += elevation * Vector3.up;
-            if (!dash)
-                if (maze.owner.cameraPosition == CameraPosition.Cell)
-                {
-                    camera.position += Mathf.Sin(currentBounceAngle) * 0.02f * Vector3.up;
-                    currentBounceAngle += Time.deltaTime * bounceAngleChange * (1 + (speedBoost - 1) / 2);
-                }
-
-            //    Debug.Log("set pos: " + camera.position.y);
+            view = pov;
+            maze = map;
         }
-        public void Update()
+        public void ChangeView(MazePOV pov)
         {
-            if (Mazer.paused)
-            {
-                if (UserInputs.Pressed(UserInputs.Pause))
-                    Mazer.paused = false;
-                return;
-            }
+            view = pov;
+            view.Update(feet, lastForward, lastTilt);
+        }
+        public static Vector3 Turn(Vector3 last, float delta)
+        {
+            rotateChild.position = last;
+            rotateParent.Rotate(Vector3.up, delta, Space.World);
+            return rotateChild.position;
+        }
+        public void Update(int moveDirection, int turnDirection, float mouseY = 0)
+        {        
+            Vector3 moveVector;
 
-            Vector3 dir, fwd3d = new Vector3(character.forward.x, 0, character.forward.z).normalized;
+            float lt = lastTilt;
+            lastTilt = GetTilt(mouseY);
+            bool changed = lt != lastTilt;
 
-            bool rightTurn, foreMove;
             switch (movementMode)
             {
                 case MovementMode.Normal:
-                    if ((foreMove = UserInputs.Hold(UserInputs.Forward)) || UserInputs.Hold(UserInputs.Back))
+                    if (turnDirection != 0)
                     {
-                        dir = (foreMove ? 1 : -1) * fwd3d;
-                        MazeCell nextCell = MoveDirection(dir, currentCell, out Vector3 next);
+                        lastForward = Turn(lastForward, turnDirection * Time.deltaTime * turnSpeed);
+                        changed = true;
+                    }
+                    if (moveDirection != 0)
+                    {
+                        moveVector = moveDirection * lastForward;
+                        MazeCell nextCell = MoveDirection(moveVector, currentCell, out Vector3 next);
                         if (nextCell != currentCell)
                         {
                             lastCell = currentCell;
@@ -91,21 +84,15 @@ namespace Resphinx.Maze
                             lastCell.LeaveCell();
                             currentCell.EnterCell(true);
                         }
-                        feet = next;
-                        SetPosition(false);
-                    }
-                    if ((rightTurn = UserInputs.Hold(UserInputs.Right)) || UserInputs.Hold(UserInputs.Left))
-                    {
-                        int turn = rightTurn ? 1 : -1;
-                        fwd3d = Turn(turn);
+                        feet = currentCell.AddLocalElevation(next); 
+                        changed = true;
                     }
                     break;
                 case MovementMode.Dash:
                     if (dasher.dashing == DashStatus.Dashing)
                     {
-                        bool dashFinalized = dasher.Update(Time.deltaTime);
+                        bool dashFinalized = dasher.TryReach(Time.deltaTime);
                         feet = dasher.position;
-                        SetPosition(true);
                         if (dashFinalized)
                         {
                             dasher.dashing = DashStatus.None;
@@ -119,45 +106,38 @@ namespace Resphinx.Maze
                             lastCell.LeaveCell();
                             currentCell = dasher.destination;
                             currentCell.EnterCell(false);
+                            feet=currentCell.AddLocalElevation(currentCell.position ) ;
                         }
+                        changed = true;
                     }
                     break;
             }
-            if (maze.owner.cameraPosition == CameraPosition.Cell && mouseTilt)
-            {
-                float tilt = GetTilt();
-                Vector3 fwd = new Vector3(fwd3d.x, mouseTilt ? tilt : camera.forward.y, fwd3d.z).normalized;
-                camera.forward = fwd;
-            }
+            if (changed) view.Update(feet, lastForward, lastTilt);
+
         }
-        float GetTilt()
+        float GetTilt(float y)
         {
-            if (Mouse.current != null)
+            if (y == 0) return 0;
+            float ya = Mathf.Abs(y);
+            if (ya < 0.2f) y = 0;
+            else
             {
-                float h = Screen.height / 2;
-                float y = Mouse.current.position.y.value - h;
-                y /= h;
-                float ya = Mathf.Abs(y);
-                float r = 0;
-                if (ya < 0.2f) y = 0;
-                else
-                {
-                    y = (Mathf.Sign(y) * (ya - 0.2f)) * 1.25f;
-                    ya = Mathf.Abs(y);
-                    if (ya > 1) y = Mathf.Sign(y);
-                }
-                return Mathf.Sin(y * Mathf.PI / 3);
+                y = (Mathf.Sign(y) * (ya - 0.2f)) * 1.25f;
+                ya = Mathf.Abs(y);
+                if (ya > 1) y = Mathf.Sign(y);
             }
-            else return 0;
+            return Mathf.Sin(y * Mathf.PI / 3);
         }
         public void SetCurrentCell(int x, int y, int z)
         {
-            feet = new Vector3(x * maze.size, z * maze.height, y * maze.size);
-            camera.position = feet + elevation * Vector3.up;
-            //     Debug.Log("set cell: " + camera.position.y);
             currentCell = maze.cells[x, y, z];
             lastCell = currentCell;
-            maze.vision.levels[z].Apply(currentCell , maze.owner.currentVisionOffset);
+            feet = currentCell.AddLocalElevation(currentCell.position);
+            lastForward = Vector3.forward;
+            lastTilt = 0;
+            view.Update(feet, lastForward, lastTilt);
+            //     Debug.Log("set cell: " + camera.position.y);
+              maze.vision.levels[z].Apply(currentCell, maze.owner.currentVisionOffset);
         }
         bool DashDirection(Vector3 u, MazeCell cell, out MazeCell md)
         {
@@ -180,7 +160,7 @@ namespace Resphinx.Maze
             if (a >= 0)
                 if (maze.InRange(cell.x + x, cell.y + y))
                     if (maze.cells[cell.x + x, cell.y + y, cell.z] != null)
-                        if (maze.cells[cell.x + x, cell.y + y, cell.z].situation != PairSituation.Void)
+                        if (maze.cells[cell.x + x, cell.y + y, cell.z].situation != BundleSituation.Void)
                             if (cell.connection[a, b] != Connection.Unpassable)
                                 md = maze.cells[cell.x + x, cell.y + y, cell.z];
 
@@ -192,7 +172,7 @@ namespace Resphinx.Maze
             md = null;
             if (level >= 0 && level < maze.levels)
                 if (maze.cells[cell.x, cell.y, level] != null)
-                    if (maze.cells[cell.x, cell.y, level].situation != PairSituation.Void && maze.cells[cell.x, cell.y, level].situation != PairSituation.Undefined)
+                    if (maze.cells[cell.x, cell.y, level].situation != BundleSituation.Void && maze.cells[cell.x, cell.y, level].situation != BundleSituation.Hanging)
                         md = maze.cells[cell.x, cell.y, level];
             return md != null;
         }
@@ -207,30 +187,10 @@ namespace Resphinx.Maze
             next = feet;
             return cell;
         }
-        Vector3 Turn(int dir)
-        {
-            if (maze.owner.cameraPosition == CameraPosition.Above)
-            {
-                if (maze.owner.rotateCamera)
-                {
-                    camera.Rotate(Vector3.up, dir * Time.deltaTime * turnSpeed, Space.World);
-                    return new Vector3(camera.forward.x, 0, camera.forward.z);
-                }
-                else
-                {
-                    character.Rotate(Vector3.up, dir * Time.deltaTime * turnSpeed, Space.World);
-                    return new Vector3(character.forward.x, 0, character.forward.z);
-                }
-            }
-            else
-            {
-                camera.Rotate(Vector3.up, dir * Time.deltaTime * turnSpeed, Space.World);
-                return new Vector3(camera.forward.x, 0, camera.forward.z);
-            }
-        }
+
         public void ActivateDash(DashMode mode)
         {
-            if (movementMode != MovementMode.Dash && dasher.dashing == DashStatus.None)
+            if (movementMode != MovementMode.Dash && dasher.dashing == DashStatus.None && canDash)
             {
                 movementMode = MovementMode.Dash;
                 dashMode = mode;
@@ -239,7 +199,7 @@ namespace Resphinx.Maze
                 switch (dashMode)
                 {
                     case DashMode.Look:
-                        v = maze.owner.cameraPosition == CameraPosition.Above && !maze.owner.rotateCamera ? character.transform.forward : camera.transform.forward;
+                        v = lastForward;
                         break;
                     case DashMode.Right: v = Vector3.forward; break;
                     case DashMode.Forward: v = Vector3.right; break;

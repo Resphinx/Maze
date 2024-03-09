@@ -14,9 +14,9 @@ namespace Resphinx.Maze
     }
     public class MazeMap
     {
-        public Mazer owner;
+        public MazeOwner owner;
         public GameObject root;
-        
+
         public float activeTime;
         public const int VisibilityStateCount = 2;
         public const int TransChance = 7;
@@ -34,20 +34,20 @@ namespace Resphinx.Maze
         List<PrefabManager> seePrefabs = new List<PrefabManager>();
         public List<WallData> seeThroughWalls = new List<WallData>();
 
-        public float transparencyActivation = 0;
-        public float transparencyDuration = 10;
-
         GameObject structure;
         public GameObject[] levelRoot;
         public GameObject prefabClone;
         public ItemManager itemManager;
 
         public VisionMap vision;
-        public List<MazeCell> pairs = new List<MazeCell>();
-        public int lastPairIndex = 0;
+        public List<MazeCell> bundledCells = new List<MazeCell>();
+        public List<CellBundle> bundles = new List<CellBundle>();
+        public int lastBundleIndex = 0;
+
+        public bool transparency = false;
         public MazeMap(int row, int col, int level, float size, float height)
         {
-             this.size = size;
+            this.size = size;
             this.height = height;
             rows = row;
             cols = col;
@@ -59,7 +59,11 @@ namespace Resphinx.Maze
             vision = new VisionMap(this);
             itemManager = new ItemManager();
         }
-
+        public void SetRoot(MazeOwner owner)
+        {
+            this.owner = owner;
+            root = new GameObject("Maze Root " + owner.mazeIndex);
+        }
         public void SetPrefabs(GameObject root)
         {
             MazeElements me = root.GetComponent<MazeElements>();
@@ -126,8 +130,11 @@ namespace Resphinx.Maze
             seePrefabs.Clear();
             seeThroughWalls.Clear();
         }
+
         public void Initialize()
         {
+
+
             DateTime now = DateTime.Now;
             int ms = now.Millisecond;
             UnityEngine.Random.InitState(ms);
@@ -135,10 +142,9 @@ namespace Resphinx.Maze
             foreach (PrefabManager pm in floorPrefabs)
             {
                 if (pm.settings != null)
-                    if (pm.settings.Paired)
-                        CreatePair(pm);
+                    if (pm.settings.Bundled)
+                        CreateBundle(pm);
             }
-            MazeCell.H2S = 0.5f * height / size;
             for (int k = 0; k < levels; k++)
             {
                 CreateCells(k);
@@ -147,7 +153,7 @@ namespace Resphinx.Maze
                 {
                     MazeCell nc, mc = Cell(k, i);
                     if (mc != null)
-                        if (mc.situation != PairSituation.Undefined)
+                        if (mc.situation != BundleSituation.Hanging)
                             for (int j = 0; j < 4; j++)
                             {
                                 Vector2Int d = MazeCell.Delta(j);
@@ -155,7 +161,7 @@ namespace Resphinx.Maze
                                 if (InRange(mc.x + d.x, mc.y + d.y))
                                 {
                                     nc = cells[mc.x + d.x, mc.y + d.y, k];
-                                    if (nc.situation == PairSituation.Undefined) mc.Set(j, Connection.Unpassable);
+                                    if (nc.situation == BundleSituation.Hanging) mc.Set(j, Connection.Unpassable);
                                     else if (!mc.IsOpen(j) && !nc.IsOpen(MazeCell.X(j)))
                                     {
                                         if (mc.Connectable(j) && nc.Connectable(MazeCell.X(j)))
@@ -298,7 +304,7 @@ namespace Resphinx.Maze
                             path[i].Neighbor(MazeCell.X(d), path[i - 1]);
                             path[i - 1].Neighbor(d, path[i]);
                         }
-                        else if (cells[p.x, p.y, lev].situation != PairSituation.Void && cells[p.x, p.y, lev].IsOpen(MazeCell.X(d)))
+                        else if (cells[p.x, p.y, lev].situation != BundleSituation.Void && cells[p.x, p.y, lev].IsOpen(MazeCell.X(d)))
                         {
                             path[i].Set(d);
                             cells[p.x, p.y, lev].Set(MazeCell.X(d));
@@ -314,7 +320,7 @@ namespace Resphinx.Maze
                     if (cells[m, n, lev] == null)
                         cells[m, n, lev] = MazeCell.Void(this, m, n, lev);
         }
-        void CreatePair(PrefabManager pm)
+        void CreateBundle(PrefabManager pm)
         {
             if (pm.settings.height != 0)
                 if (levels == 0) return;
@@ -322,18 +328,17 @@ namespace Resphinx.Maze
             int dy = pm.settings.height;
             int k = 0;
             int x, y, z;
-            for (int i = 0; i < pm.settings.positions.Length && i < pm.settings.positions.Length; i++)
+            for (int i = 0; i < pm.settings.positions.Length; i++)
                 if (k < pm.settings.count)
                 {
                     x = pm.settings.positions[i].x;
                     y = pm.settings.positions[i].y;
                     z = pm.settings.positions[i].z;
-                    MazeCell[] mcs = MazeCell.CreatePath(this, x, y, z, pm.settings.directions[i], pm.settings.length, dy);
-                    if (mcs != null)
+                    CellBundle cb = MazeCell.SlopeBundle(this, x, y, z, pm.settings.directions[i], pm.settings.length, pm.settings.width, dy);
+                    if (cb != null)
                     {
-                        mcs[0].floorPrefab = pm;
-                        for (int j = 0; j < mcs.Length; j++)
-                            cells[mcs[j].x, mcs[j].y, mcs[j].z] = mcs[j];
+                        cb.AddCellsToMaze();
+                        cb.handle.floorPrefab = pm;
                     }
                     k++;
                 }
@@ -383,18 +388,28 @@ namespace Resphinx.Maze
                         MazeCell mc = cells[i, j, k];
                         cr.isEdge = mc.x == 0 || mc.x == cols - 1 || mc.y == 0 || mc.y == rows - 1;
                         cr.isCorner = (mc.x == 0 || mc.x == cols - 1) && (mc.y == 0 || mc.y == rows - 1);
-                        if (mc.situation != PairSituation.Void)
+                        if (mc.situation != BundleSituation.Void)
                         {
                             if (mc.floorPrefab != null)
                             {
-                                cr.sideIndex = mc.pairDirection;
-                                vision.AddItem(mc.floor = PrefabManager.RandomIndexed(mc, new List<PrefabManager>() { mc.floorPrefab }, cr, size), mc.x, mc.y, k, VisionItemType.Floor, cr.alwaysVisible);
-                                mc.floor.name = "fl-pair " + mc.x + "," + mc.y;
+                                cr.sideIndex = mc.bundle.side;
+                                vision.AddItem(mc.floor = PrefabManager.RandomIndexed(mc, new List<PrefabManager>() { mc.floorPrefab }, cr, size), mc.x, mc.y, k, VisionItemType.Floor);
+                                 mc.floor.name = "fl-pair " + mc.x + "," + mc.y;
+                                if (cr.alwaysVisible)
+                                    vision.AddAlwaysVisible(mc.floor, k, mc.floorPrefab.settings.height + k);
                             }
-                            else if (mc.situation == PairSituation.Normal)
+                            else if (mc.situation == BundleSituation.Middle || mc.situation == BundleSituation.Entrance)
                             {
-                                vision.AddItem(mc.floor = PrefabManager.RandomFloor(mc, floorPrefabs, cr, size), mc.x, mc.y, k, VisionItemType.Floor, cr.alwaysVisible);
+                                 vision.AddItem(mc.floor = new GameObject("fl-empty" + mc.x + "," + mc.y), mc.x, mc.y, k, VisionItemType.Floor);
+                                mc.floor.transform.parent = levelRoot[k].transform;
+                                mc.floor.transform.localPosition = mc.position;
+                            }
+                            else if (mc.situation == BundleSituation.Unbundled)
+                            {
+                                vision.AddItem(mc.floor = PrefabManager.RandomFloor(mc, floorPrefabs, cr, size), mc.x, mc.y, k, VisionItemType.Floor);
                                 mc.floor.name = "fl-solo " + mc.x + "," + mc.y;
+                                if (cr.alwaysVisible)
+                                    vision.AddAlwaysVisible(mc.floor, k, mc.floorPrefab.settings.height + k);
                             }
                             // walls
                             for (side = 0; side < 4; side++)
@@ -403,12 +418,13 @@ namespace Resphinx.Maze
                                 cr.sideIndex = side;
                                 bool hasAdjacent = true;
                                 if (!InRange(v.x, v.y)) hasAdjacent = false;
-                                else if (cells[v.x, v.y, k].situation == PairSituation.Void) hasAdjacent = false;
+                                else if (cells[v.x, v.y, k].situation == BundleSituation.Void) hasAdjacent = false;
 
                                 if (hasAdjacent)
                                 {
-                                    if (cells[v.x, v.y, k].pairIndex * mc.pairIndex == 0 || cells[v.x, v.y, k].pairIndex != mc.pairIndex)
-                                        if (v.x >= mc.x && v.y >= mc.y)
+                                    if (v.x >= mc.x && v.y >= mc.y)
+                                    {
+                                        if (cells[v.x, v.y, k].bundle == null || mc.bundle == null || cells[v.x, v.y, k].bundle != mc.bundle)
                                         {
                                             cr.isEdge = false;
                                             cr.isCorner = false;
@@ -416,14 +432,16 @@ namespace Resphinx.Maze
                                             {
                                                 go = PrefabManager.RandomIndexed(mc, openPrefabs, cr, size);
                                                 go.name = $"open {i},{j},{k}-{side}";
-                                                vision.AddItem(go, mc.x, mc.y, k, VisionItemType.Open, cr.alwaysVisible, side);
+                                                vision.AddItem(go, mc.x, mc.y, k, VisionItemType.Open, side);
+                                                if (cr.alwaysVisible) vision.AddAlwaysVisible(go, k, k);
                                                 wallData = mc.SetWall(go, side, openPrefabs[cr.prefabIndex].settings.mirrored, openPrefabs[cr.prefabIndex].settings.opening);
                                             }
                                             else
                                             {
                                                 go = PrefabManager.RandomIndexed(mc, wallPrefabs, cr, size);
                                                 go.name = $"closed {i},{j},{k}-{side}";
-                                                vision.AddItem(go, mc.x, mc.y, k, VisionItemType.Opaque, cr.alwaysVisible, side);
+                                                vision.AddItem(go, mc.x, mc.y, k, VisionItemType.Opaque, side);
+                                                if (cr.alwaysVisible) vision.AddAlwaysVisible(go, k, k);
                                                 wallData = mc.SetWall(go, side);
                                                 if (seePrefabs.Count > 0)
                                                 {
@@ -433,20 +451,28 @@ namespace Resphinx.Maze
                                                         seeThroughWalls.Add(wallData);
                                                         go = PrefabManager.RandomIndexed(mc, seePrefabs, cr, size);
                                                         go.name = $"trans {i},{j},{k}-{side}";
-                                                        vision.AddItem(go, mc.x, mc.y, k, VisionItemType.Transparent, cr.alwaysVisible, side);
+                                                        vision.AddItem(go, mc.x, mc.y, k, VisionItemType.Transparent, side);
+                                                        if (cr.alwaysVisible) vision.AddAlwaysVisible(go, k, k);
                                                         wallData.seeThrough = go;
                                                     }
                                                 }
                                             }
                                             cells[v.x, v.y, k].SetWall(wallData, MazeCell.X(side));
                                         }
+                                        else
+                                        {
+                                            vision.AddItem(mc.x, mc.y, k, side);
+                                            Debug.Log("none: " + mc.ijk.ToString() + cells[v.x, v.y, k].ijk.ToString());
+                                        }
+                                    }
                                 }
                                 else
                                 {
                                     cr.isEdge = true;
                                     go = PrefabManager.RandomIndexed(mc, wallPrefabs, cr, size);
                                     go.name = $"edge {i},{j},{k}-{side}";
-                                    vision.AddItem(go, mc.x, mc.y, k, VisionItemType.Opaque, cr.alwaysVisible, side);
+                                    vision.AddItem(go, mc.x, mc.y, k, VisionItemType.Opaque, side);
+                                    if (cr.alwaysVisible) vision.AddAlwaysVisible(go, k, k);
                                     mc.SetWall(go, side, v.x >= mc.x && v.y >= mc.y);
                                 }
                             }
@@ -456,7 +482,7 @@ namespace Resphinx.Maze
                             for (int itemIndex = 0; itemIndex < itemManager.ids.Length; itemIndex++)
                                 if (UnityEngine.Random.value < itemManager.ids[itemIndex].chance)
                                 {
-                                    if (cells[i, j, k].situation != PairSituation.Normal) continue;
+                                    if (cells[i, j, k].situation != BundleSituation.Unbundled) continue;
                                     go = itemManager.GetItem(cells[i, j, k], itemIndex, cr);
                                     if (go != null)
                                     {
@@ -472,52 +498,48 @@ namespace Resphinx.Maze
                 cr.isEdge = cr.isCorner = false;
                 for (int i = 0; i <= cols; i++)
                     for (int j = 0; j <= rows; j++)
-                    {
-                        for (int d = 0; d < 4; d++)
+                        if (CellBundle.ColumnPossible(this, i, j, k))
                         {
-                            if (InRange(i + (d % 2) - 1, j + d / 2 - 1))
-                                if (cells[i + (d % 2) - 1, j + d / 2 - 1, k].situation != PairSituation.Void)
-                                {
-                                    cr.isEdge = i == 0 || i == cols || j == 0 || j == rows;
-                                    cr.isCorner = (i == 0 || i == cols) && (j == 0 || j == rows);
-                                    Vector3 p = new Vector3((i - 0.5f) * this.size, k * height, (j - 0.5f) * this.size);
-                                    go = PrefabManager.RandomNoIndex(p, columnPrefabs, cr, size);
-                                    go.name = $"col {i},{j},{k}";
-                                    vision.AddItem(go, i, j, k, VisionItemType.Column, cr.alwaysVisible);
-                                    break;
-                                }
+                            cr.isEdge = i == 0 || i == cols || j == 0 || j == rows;
+                            cr.isCorner = (i == 0 || i == cols) && (j == 0 || j == rows);
+                            Vector3 p = new Vector3((i - 0.5f) * this.size, k * height, (j - 0.5f) * this.size);
+                            go = PrefabManager.RandomNoIndex(p, columnPrefabs, cr, size);
+                            go.name = $"col {i},{j},{k}";
+                            vision.AddItem(go, i, j, k, VisionItemType.Column);
+                            if (cr.alwaysVisible) vision.AddAlwaysVisible(go, k, k);
                         }
-
-
-                    }
+                //     else Debug.Log("col " + i + ", " + j + ", " + k);
             }
+            root.transform.SetPositionAndRotation(owner.transform.position, owner.transform.rotation);
         }
-        public void SetCurrentCell(int lev = 0)
+        public void SetCurrentCell(int lev)
         {
             for (int i = 0; i < cols; i++)
                 for (int j = 0; j < rows; j++)
                     if (cells[i, j, lev] != null)
-                        if (cells[i, j, lev].situation == PairSituation.Normal)
+                        if (cells[i, j, lev].situation == BundleSituation.Unbundled)
                         {
-                           owner.walker.SetCurrentCell(i, j, lev);
+                            owner.walker.SetCurrentCell(i, j, lev);
                             return;
                         }
         }
-        public void SetVision(bool rayCast, int growOffset = 0)
+        public void SetCurrentCell(MazeCell cell)
+        {
+            if (cell != null) owner.walker.SetCurrentCell(cell.x, cell.y, cell.z);
+        }
+        public void SetVision(bool rayCast, byte growOffset = 0)
         {
             vision.SetLastStates();
-            vision.Vision(rayCast, growOffset);
+            vision.VisionAsync(rayCast, growOffset);
         }
-        public bool transparency = false;
         public void SetTransparency(bool t)
         {
             transparency = t;
-            if (t) transparencyActivation = owner.ActiveTime;
+            MazeCell mc = owner.walker.currentCell;
+            if (t) vision.levels[mc.z].Apply(owner.walker.currentCell, owner.currentVisionOffset);
             else
-            {
-                MazeCell mc = owner.walker.currentCell;
                 vision.levels[mc.z].RemoveTransparency(mc);
-            }
+
         }
 
     }

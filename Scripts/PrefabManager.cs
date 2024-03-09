@@ -54,7 +54,7 @@ namespace Resphinx.Maze
             if (!addSides || (int)pm.settings.side > (int)Sides.Z_Negative || !pm.settings.rotatable)
             {
                 pm.side = new GameObject[] { pm.root };
-                  pm.prefabType = PrefabType.Mono;
+                pm.prefabType = PrefabType.Mono;
             }
             else
             {
@@ -75,7 +75,7 @@ namespace Resphinx.Maze
         public static PrefabManager CreateRandom(MazeMap maze, string name, GameObject handle)
         {
             PrefabSettings mc = handle.GetComponent<PrefabSettings>();
-            if (mc.Paired)
+            if (mc.Bundled)
                 return CreateQuadro(maze, name, handle);
             onCreation = true;
             PrefabManager pm = new PrefabManager()
@@ -108,7 +108,7 @@ namespace Resphinx.Maze
             {
                 name = name,
                 root = Clone(handle),
-                  maze = maze,
+                maze = maze,
             };
             pm.root.transform.SetParent(maze.prefabClone.transform);
             pm.settings = pm.root.GetComponent<PrefabSettings>();
@@ -198,12 +198,12 @@ namespace Resphinx.Maze
         public static GameObject RandomNoIndex(Vector3 p, List<PrefabManager> list, CloneResult cr, float scale)
         {
             PrefabManager l = GetPool(list, cr, true);
-            cr.alwaysVisible = l.settings == null ? false : l.settings.alwaysVisible;
+            cr.alwaysVisible =  l.settings.alwaysVisible;
             //        if (list[prefabIndex].name == "columns") Debug.Log("selected pool: " + prefabIndex + " " + list[prefabIndex].side[0].name);
             //     prefabIndex = list[prefabIndex].allIndex;
             cr.sideIndex = UnityEngine.Random.Range(0, l.side.Length);
-            GameObject go = cr.gameObject = Clone(l.side[cr.sideIndex],l. maze.levelRoot[cr.level].transform, cr.level, scale);
-            go.transform.position = p;
+            GameObject go = cr.gameObject = Clone(l.side[cr.sideIndex], l.maze.levelRoot[cr.level].transform, cr.level, scale);
+            go.transform.localPosition = p;
             return go;
         }
 
@@ -233,25 +233,44 @@ namespace Resphinx.Maze
 
             int index;
             GameObject go;
+            Vector3 offset = Vector3.zero;
+            Vector2Int d;
+
             if (l.side.Length == 1)
             {
-                index = 0;
-                go = cr.gameObject = Clone(l.side[index], l.maze.levelRoot[cr.level].transform, cr.level, scale);
-                go.transform.position = p;
+                go = cr.gameObject = Clone(l.side[0], l.maze.levelRoot[cr.level].transform, cr.level, scale);
+                if (l.settings.centerType == CenterType.SelfCenter)
+                {
+                    d = MazeCell.Delta((int)l.settings.side);
+                    offset = new Vector3(0.5f * d.x * l.maze.size, 0, 0.5f * d.y * l.maze.size);
+                }
             }
             else
             {
                 index = rotatable && l.settings.switchSides ? (cr.sideIndex + UnityEngine.Random.Range(0, 2) * 2) % 4 : cr.sideIndex;
                 go = cr.gameObject = Clone(l.side[index], l.maze.levelRoot[cr.level].transform, cr.level, scale);
                 if (index == cr.sideIndex)
-                    go.transform.position = p;
+                {
+                    if (l.settings.centerType == CenterType.SelfCenter)
+                    {
+                        d = MazeCell.Delta(index);
+                        offset = new Vector3(0.5f * d.x * l.maze.size, 0, 0.5f * d.y * l.maze.size);
+                    }
+                }
                 else
                 {
-                    go.name += $" <{index}> ";
-                    Vector2 d = MazeCell.Delta(cr.sideIndex);
-                    go.transform.position = new Vector3(p.x + d.x * l.maze.size, p.y, p.z + d.y * l.maze.size);
+                    d = MazeCell.Delta(cr.sideIndex);
+                    if (l.settings.centerType == CenterType.SelfCenter)
+                        offset = new Vector3(-0.5f * d.x * l.maze.size, 0, -0.5f * d.y * l.maze.size);
+                    else
+                    {
+                        go.transform.localPosition = p + offset; go.name += $" <{index}> ";
+                        d = MazeCell.Delta(cr.sideIndex);
+                        offset = new Vector3(d.x * l.maze.size, 0, d.y * l.maze.size);
+                    }
                 }
             }
+            go.transform.localPosition = p + offset;
             return go;
         }
         /// <summary>
@@ -299,8 +318,8 @@ namespace Resphinx.Maze
             }
             else
                 go = RandomIndexed(cell.position, list, cr, scale, false);
-            go.transform.position = cell.position;
-            go.transform.Rotate(Vector2.up, rot * 90, Space.World);
+            go.transform.localPosition = cell.position;
+            go.transform.Rotate(list[0].maze.root.transform.up, rot * 90, Space.World);
             return go;
         }
         public static GameObject Clone(GameObject original, Transform newParent = null, int level = -1, float scale = 1f)
@@ -323,11 +342,11 @@ namespace Resphinx.Maze
             clone.gameObject.layer = original.gameObject.layer;
             MeshRenderer ro = original.GetComponent<MeshRenderer>();
             MeshRenderer rc = clone.GetComponent<MeshRenderer>();
-               if (ro != null)
+            if (ro != null)
             {
                 rc.lightmapIndex = ro.lightmapIndex;
                 rc.lightmapScaleOffset = ro.lightmapScaleOffset;
-              }
+            }
 
             int cc = original.transform.childCount;
             for (int i = 0; i < cc; i++)

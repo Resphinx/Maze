@@ -4,12 +4,14 @@ public class ModelCountEditor : Editor
 {
     SerializedProperty type;
     SerializedProperty alwaysVisible;
+    SerializedProperty centerType;
     SerializedProperty byCount;
     SerializedProperty count;
     SerializedProperty edge;
     SerializedProperty corner;
     SerializedProperty length;
     SerializedProperty height;
+    SerializedProperty width;
     SerializedProperty positions;
     SerializedProperty directions;
     SerializedProperty wallType;
@@ -24,12 +26,14 @@ public class ModelCountEditor : Editor
     {
         type = serializedObject.FindProperty("type");
         alwaysVisible = serializedObject.FindProperty("alwaysVisible");
+        centerType = serializedObject.FindProperty("centerType");
         byCount = serializedObject.FindProperty("byCount");
         count = serializedObject.FindProperty("count");
         edge = serializedObject.FindProperty("edge");
         corner = serializedObject.FindProperty("corner");
         length = serializedObject.FindProperty("length");
         height = serializedObject.FindProperty("height");
+        width = serializedObject.FindProperty("width");
         positions = serializedObject.FindProperty("positions");
         directions = serializedObject.FindProperty("directions");
         wallType = serializedObject.FindProperty("wallType");
@@ -58,6 +62,7 @@ public class ModelCountEditor : Editor
         EditorGUILayout.PropertyField(side);
         if (m.type == Resphinx.Maze.ModelType.Wall)
         {
+            EditorGUILayout.PropertyField(centerType);
             EditorGUILayout.PropertyField(rotatable);
             EditorGUILayout.PropertyField(switchSides);
 
@@ -75,6 +80,7 @@ public class ModelCountEditor : Editor
             if (m.length < 1) m.length = 1;
             if (m.length > 1)
             {
+                EditorGUILayout.PropertyField(width);
                 EditorGUILayout.PropertyField(height);
                 EditorGUILayout.PropertyField(rotatable);
                 EditorGUILayout.PropertyField(positions);
@@ -83,6 +89,7 @@ public class ModelCountEditor : Editor
         }
         else if (m.type == Resphinx.Maze.ModelType.Item)
         {
+            EditorGUILayout.PropertyField(centerType);
             EditorGUILayout.PropertyField(id);
             EditorGUILayout.PropertyField(rotatable);
             EditorGUILayout.PropertyField(adjacentTo);
