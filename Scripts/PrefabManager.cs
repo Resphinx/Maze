@@ -6,40 +6,108 @@ using System.Threading.Tasks;
 using UnityEngine;
 namespace Resphinx.Maze
 {
+    /// <summary>
+    /// This class contains the post-instantiation characteristics and some criteria for it.
+    /// </summary>
     public class CloneResult
     {
+        /// <summary>
+        /// The created game object
+        /// </summary>
         public GameObject gameObject;
-        public int sideIndex = 0, prefabIndex;
-        public bool isEdge = false, isCorner = false, isVoid = false;
+        /// <summary>
+        /// The side on which the game object should be created.
+        /// </summary>
+        public int sideIndex = 0;
+        /// <summary>
+        /// The prefab index that the game object is instantied by.
+        /// </summary>
+        public int prefabIndex;
+        /// <summary>
+        /// If only the prefabs with edge <see cref="Selector"/> should be considered
+        /// </summary>
+        public bool isEdge = false;
+        /// <summary>
+        /// If only the prefabs with corner <see cref="Selector"/> should be considered
+        /// </summary>
+        public bool isCorner = false;
+        /// If only the prefabs with void <see cref="Selector"/> should be considered
+        public bool isVoid = false;
+        /// <summary>
+        /// The level on which the game object is instantiated (this is used for naming the game object)
+        /// </summary>
         public int level = 0;
+        /// <summary>
+        /// If the created game object has a prefab with <see cref="PrefabSettings.alwaysVisible"/> as true.
+        /// </summary>
         public bool alwaysVisible = false;
-        public CloneResult Criteria(bool e, bool c, bool v, int level = -1, int sideIndex = -1)
-        {
-            isCorner = c;
-            isVoid = v;
-            isEdge = e;
-            this.level = level;
-            if (sideIndex >= 0) this.sideIndex = sideIndex;
-            return this;
-        }
     }
+    /// <summary>
+    /// This class is repsonsible for preparing the prefabs and instantiating game objects and maze elements based on them.
+    /// </summary>
     public class PrefabManager
     {
+        /// <summary>
+        /// The maze where the elements should be created in.
+        /// </summary>
         public MazeMap maze;
+        /// <summary>
+        /// The name of the prefab (not important).
+        /// </summary>
         public string name;
+        /// <summary>
+        /// The root object where the different versions (or orientations) of the prefabs belong to.
+        /// </summary>
         public GameObject root;
+        /// <summary>
+        /// The prefab instances for different sides.
+        /// </summary>
         public GameObject[] side;
+        /// <summary>
+        /// The prefab setting for this prefab manager.
+        /// </summary>
         public PrefabSettings settings;
-        //     public int[] childIndex;
-        public int allIndex;
-        //    public int count = 1;
+        /// <summary>
+        /// See <see cref="PrefabSettings.byCount"/> and <see cref="Counting.byCount"/>. This value will be final after localization.
+        /// </summary>
+        public bool byCount;
+        /// <summary>
+        /// The pool initially set as an integer by <see cref="PrefabSettings.byCount"/> and <see cref="Counting.byCount"/> (after localization).
+        /// </summary>
+        public int initialPool;
+        /// <summary>
+        /// For each set of perfab managers, their pool is calculated based on their <see cref="initialPool"/> values.
+        /// </summary>
         public float pool = 0;
-        public bool pairable = false;
-        //   public bool pooled = true;
+        /// <summary>
+        /// See <see cref="PrefabSettings.positions"/> and <see cref="LocalSettings.placements"/>. This value will be final after localization.
+        /// </summary>
+        public Vector3Int[] positions;
+        public int[] directions;
+        /// <summary>
+        /// The prefab type: <c>Ordered</c>: the sides are important; <c>Random</c>: the side order is not important; and <c>Mono</c> only one version exists that may or not be sided.
+        /// </summary>
         public enum PrefabType { Ordered, Random, Mono }
+        /// <summary>
+        /// The prefab type of this prefab manager.
+        /// </summary>
         public PrefabType prefabType;
+        /// <summary>
+        /// The order correspondence when imported from Blender (due to rotations).
+        /// </summary>
         public static int[] order = new int[] { 2, 3, 0, 1 };
+        /// <summary>
+        /// (deprecated) If this is true, certain operations will not trigger. 
+        /// </summary>
         public static bool onCreation = false;
+        /// <summary>
+        /// Creates a prefab manager based only one orientation of an element. This is useful for columns or otehr elements that have limited initial directions (see <see cref="PrefabSettings.side"/>).
+        /// </summary>
+        /// <param name="maze">The destination maze</param>
+        /// <param name="name">Name of the prefab manager</param>
+        /// <param name="handle">The parent object of the intended instantiable objects</param>
+        /// <param name="addSides">If this is true, it will create other missing sides and the prefab type will be set to <c>Ordered</c></param>
+        /// <returns></returns>
         public static PrefabManager CreateMono(MazeMap maze, string name, GameObject handle, bool addSides = false)
         {
             onCreation = true;
@@ -50,7 +118,7 @@ namespace Resphinx.Maze
                 maze = maze,
             };
             pm.root.transform.SetParent(maze.prefabClone.transform);
-            pm.settings = pm.root.GetComponent<PrefabSettings>();
+            pm.SetSettings(handle);
             if (!addSides || (int)pm.settings.side > (int)Sides.Z_Negative || !pm.settings.rotatable)
             {
                 pm.side = new GameObject[] { pm.root };
@@ -72,11 +140,18 @@ namespace Resphinx.Maze
             onCreation = false;
             return pm;
         }
+        /// <summary>
+        /// Creates a prefab manager based on non-ordered elements. This is useful for floors which follow a different order than normal cell sides .
+        /// </summary>
+        /// <param name="maze">The destination maze</param>
+        /// <param name="name">Name of the prefab manager</param>
+        /// <param name="handle">The parent object of the intended instantiable objects</param>
+        /// <returns></returns>
         public static PrefabManager CreateRandom(MazeMap maze, string name, GameObject handle)
         {
             PrefabSettings mc = handle.GetComponent<PrefabSettings>();
             if (mc.Bundled)
-                return CreateQuadro(maze, name, handle);
+                return CreateOrdered(maze, name, handle);
             onCreation = true;
             PrefabManager pm = new PrefabManager()
             {
@@ -85,11 +160,8 @@ namespace Resphinx.Maze
                 maze = maze,
             };
             pm.root.transform.SetParent(maze.prefabClone.transform);
-            pm.settings = pm.root.GetComponent<PrefabSettings>();
-
+            pm.SetSettings(handle);
             pm.side = new GameObject[4];
-            //    childIndex = new int[type == PrefabType.Mono ? 1 : 4];
-            //     for (int i = 0; i < side.Length; i++) childIndex[i] = -1;
 
             pm.prefabType = PrefabType.Random;
             int cc = pm.root.transform.childCount;
@@ -100,7 +172,14 @@ namespace Resphinx.Maze
             onCreation = false;
             return pm;
         }
-        public static PrefabManager CreateQuadro(MazeMap maze, string name, GameObject handle)
+        /// <summary>
+        /// Creates a prefab manager based on ordered elements with four possible orientations. This is useful for walls and items.
+        /// </summary>
+        /// <param name="maze">The destination maze</param>
+        /// <param name="name">Name of the prefab manager</param>
+        /// <param name="handle">The parent object of the intended instantiable objects</param>
+        /// <returns></returns>
+        public static PrefabManager CreateOrdered(MazeMap maze, string name, GameObject handle)
         {
             onCreation = true;
             if ((int)handle.GetComponent<PrefabSettings>().side <= (int)Sides.Z_Negative) return CreateMono(maze, name, handle, true);
@@ -111,7 +190,7 @@ namespace Resphinx.Maze
                 maze = maze,
             };
             pm.root.transform.SetParent(maze.prefabClone.transform);
-            pm.settings = pm.root.GetComponent<PrefabSettings>();
+            pm.SetSettings(handle);
             pm.side = new GameObject[4];
             pm.prefabType = PrefabType.Ordered;
             int ncc = 0, cc = pm.root.transform.childCount;
@@ -149,16 +228,84 @@ namespace Resphinx.Maze
             onCreation = false;
             return pm;
         }
+        /// <summary>
+        /// Assigns the prefab setting and localizes it.
+        /// </summary>
+        /// <param name="handle"></param>
+        public void SetSettings(GameObject handle)
+        {
+            settings = root.GetComponent<PrefabSettings>();
+     //       PrefabSettings ps = handle.GetComponent<PrefabSettings>();
+        //    settings.local = ps.local;
+            ApplyLocal();
+        }
+        /// <summary>
+        /// Applies the <see cref="LocalSettings"/> if exists.
+        /// </summary>
+        public void ApplyLocal()
+        {
+            if (settings.local == null)
+            {
+                byCount = settings.byCount;
+                initialPool = settings.pool;
 
+                positions = new Vector3Int[settings.positions.Length];
+                directions = new int[settings.positions.Length];
+                for (int i = 0; i < settings.positions.Length; i++)
+                {
+                    Placement p = settings.positions[i];
+                    positions[i] = p.Vector;
+                    directions[i] = p.d;
+                }
+            }
+            else
+            {
+                Debug.Log("sorted " + settings.name); 
+                if (settings.local.counting.asIs)
+                {
+                    byCount = settings.byCount;
+                    initialPool = settings.pool;
+                }
+                else
+                {
+                    byCount = settings.local.counting.byCount;
+                    initialPool = settings.local.counting.pool;
+                }
+                if (settings.local.placements.Length > 0)
+                {
+                    positions = new Vector3Int[settings.local.placements.Length];
+                    directions = new int[settings.local.placements.Length];
+                    for (int i = 0; i < settings.local.placements.Length; i++)
+                    {
+                        Placement p = settings.local.placements[i];
+                        positions[i] = p.Vector;
+                        directions[i] = p.d;
+                    }
+                }
+            }
+        }
+        /// <summary>
+        /// Sets the <see cref="pool"/> of individual prefabs in a list based on their <see cref="initialPool"/>'s weight in the aggregation of initial pools.
+        /// </summary>
+        /// <param name="list"></param>
         public static void SetPool(List<PrefabManager> list)
         {
             int total = 0;
             //Debug.Log("pools :" + list.Count);
-            for (int i = 0; i < list.Count; i++) { list[i].pool = total += list[i].settings == null ? 1 : list[i].settings.count; }
-            for (int i = 0; i < list.Count; i++) { list[i].pool /= total; }
+            for (int i = 0; i < list.Count; i++)
+            {
+                list[i].pool = total += list[i].initialPool;
+            }
+            for (int i = 0; i < list.Count; i++)
+            { list[i].pool /= total; }
 
         }
-
+        /// <summary>
+        /// Check if the value a <see cref="Selector"/> matches a condition.
+        /// </summary>
+        /// <param name="c">The condition</param>
+        /// <param name="s">The selector</param>
+        /// <returns></returns>
         public static bool Check(bool c, Selector s)
         {
             if (c)
@@ -166,13 +313,23 @@ namespace Resphinx.Maze
             else
                 return s == Selector.Never || s == Selector.Both;
         }
+        /// <summary>
+        /// Selects a random prefab manager from a list based on the list's pools and certain conditions.
+        /// </summary>
+        /// <param name="list">The list of possible prefabs</param>
+        /// <param name="cr">Most conditions; also the index of the prefab in the list is set to <see cref="CloneResult.prefabIndex"/></param>
+        /// <param name="sided">If the sides (<see cref="CloneResult.sideIndex"/>) should be considered</param>
+        /// <returns>Returns the selected prefab (it is never null).</returns>
         public static PrefabManager GetPool(List<PrefabManager> list, CloneResult cr, bool sided)
         {
             float r = UnityEngine.Random.value;
             List<PrefabManager> l = new List<PrefabManager>();
+
             for (int i = 0; i < list.Count; i++)
             {
-                if (!list[i].settings.byCount)
+                bool byCount = list[i].byCount;
+
+                if (!byCount)
                     if (!sided || list[i].prefabType != PrefabType.Mono || (int)list[i].settings.side == cr.sideIndex)
                         if (Check(cr.isEdge, list[i].settings.edge))
                             //                       if (Check(cr.isVoid, list[i].modelCount.voidType))
@@ -185,7 +342,10 @@ namespace Resphinx.Maze
             cr.prefabIndex = l.Count - 1;
             for (int i = 0; i < l.Count - 1; i++)
                 if (r < l[i].pool)
-                { cr.prefabIndex = i; break; }
+                {
+                    cr.prefabIndex = i;
+                    break;
+                }
             return l[cr.prefabIndex];
         }
         /// <summary>
@@ -198,7 +358,7 @@ namespace Resphinx.Maze
         public static GameObject RandomNoIndex(Vector3 p, List<PrefabManager> list, CloneResult cr, float scale)
         {
             PrefabManager l = GetPool(list, cr, true);
-            cr.alwaysVisible =  l.settings.alwaysVisible;
+            cr.alwaysVisible = l.settings.alwaysVisible;
             //        if (list[prefabIndex].name == "columns") Debug.Log("selected pool: " + prefabIndex + " " + list[prefabIndex].side[0].name);
             //     prefabIndex = list[prefabIndex].allIndex;
             cr.sideIndex = UnityEngine.Random.Range(0, l.side.Length);
@@ -243,6 +403,7 @@ namespace Resphinx.Maze
                 {
                     d = MazeCell.Delta((int)l.settings.side);
                     offset = new Vector3(0.5f * d.x * l.maze.size, 0, 0.5f * d.y * l.maze.size);
+
                 }
             }
             else
@@ -261,13 +422,15 @@ namespace Resphinx.Maze
                 {
                     d = MazeCell.Delta(cr.sideIndex);
                     if (l.settings.centerType == CenterType.SelfCenter)
-                        offset = new Vector3(-0.5f * d.x * l.maze.size, 0, -0.5f * d.y * l.maze.size);
+                        offset = new Vector3(0.5f * d.x * l.maze.size, 0, 0.5f * d.y * l.maze.size);
                     else
                     {
-                        go.transform.localPosition = p + offset; go.name += $" <{index}> ";
+                        //          go.transform.localPosition = p + offset; 
+                        go.name += $" <{index}> ";
                         d = MazeCell.Delta(cr.sideIndex);
                         offset = new Vector3(d.x * l.maze.size, 0, d.y * l.maze.size);
                     }
+                    Debug.Log(go.name + " " + cr.sideIndex + "|" + index + " " + d.ToString());
                 }
             }
             go.transform.localPosition = p + offset;

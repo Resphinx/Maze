@@ -6,24 +6,29 @@ using System.Threading.Tasks;
 using UnityEngine;
 namespace Resphinx.Maze
 {
+    /// <summary>
+    /// Types of elements which affect the vision settings
+    /// </summary>
     public enum VisionItemType { Floor, Column, Opaque, Transparent, Open }
-    public enum VisibilityAction { OnlyDisappear, OnlyAppear, BothActions }
+    /// <summary>
+    /// The vision map settings of a level. A <see cref="VisionMap"/> contains multiple of this class.
+    /// </summary>
     public class LevelVision
     {
         /// <summary>
-        /// Active maze
+        /// The maze for this vision map
         /// </summary>
-        MazeMap maze;
+        public MazeMap maze;
         /// <summary>
-        /// All structural objects in this level (items are childrent to cell floors)
+        /// All structural objects in this level (items are children to cell floors). This list is used to show or hide objects. Each cell has a byte[] (<see cref="MazeCell.offset"/>) of its own that contains the visibility of these objects from that cell.
         /// </summary>
         public List<GameObject> all = new List<GameObject>();
         /// <summary>
         /// The last active state of all objects. This is used to minimise calling activeSelf and SetActive.
         /// </summary>
         public bool[] lastState;
-         /// <summary>
-        /// arrays of structural objects
+        /// <summary>
+        /// Arrays of structural objects
         /// </summary>
         int[,] wallV, wallH, openH, openV, seeH, seeV, floor, col;
         bool[,] noneH, noneV;
@@ -31,13 +36,35 @@ namespace Resphinx.Maze
         ///  The flattenend coordinates of columns
         /// </summary>
         Vector2[,] points;
+        /// <summary>
+        /// The visibility of the level. This will be true for the active level and levels visible from the visible bundles on that level.
+        /// </summary>
         public bool levelActive = true;
         /// <summary>
-        /// The level of this map
+        /// The level of this vision map.
         /// </summary>          
         public int level;
+        /// <summary>
+        /// The cell bundles with their first or last row on this level
+        /// </summary>
         public CellBundle[] bundles;
+        /// <summary>
+        /// The index of bundles in the maze in <see cref="bundles"/>
+        /// </summary>
         public int[] bundleLocalIndex;
+        /// <summary>
+        /// The number of vision tracks
+        /// </summary>
+        public int trackCount = 0;
+        /// <summary>
+        /// List of all materials used in structrual elements in this maze. This is used for swapping their materials with <see cref="MazeOwner.fadeMaterial"/> in case they block the character.
+        /// </summary>
+        public List<Material> allMaterials = new List<Material>();
+        /// <summary>
+        /// Creates an vision map for a level
+        /// </summary>
+        /// <param name="m">The containing maze</param>
+        /// <param name="level">The level index</param>
         public LevelVision(MazeMap m, int level)
         {
             this.level = level;
@@ -66,6 +93,9 @@ namespace Resphinx.Maze
                     //         intersected[i, j] = -1;
                 }
         }
+        /// <summary>
+        /// point on the edge of each cell from which rays are cast for vision mapping
+        /// </summary>
         static Vector2[][] povs = new Vector2[][]
          {
             Points(0),
@@ -90,6 +120,9 @@ namespace Resphinx.Maze
         }
 
         const int AngleStepCount = 20;
+        /// <summary>
+        /// Rays cast from each side of the maze for vision mapping
+        /// </summary>
         static Vector2[][] rays = new Vector2[][]
         {
             Rays(0),
@@ -108,6 +141,12 @@ namespace Resphinx.Maze
             }
             return vs;
         }
+        /// <summary>
+        /// Finds the minimum of two bytes. It is a vestige of something more complex, and will be removed. 
+        /// </summary>
+        /// <param name="a"></param>
+        /// <param name="b"></param>
+        /// <returns></returns>
         public static byte Min(byte a, byte b) { return a < b ? a : b; }
         /// <summary>
         /// Adds a structural item to this vision level. 
@@ -135,15 +174,25 @@ namespace Resphinx.Maze
                 a[i, j] = all.Count;
                 all.Add(g);
             }
+            VisionTrack vt = all[^1].AddComponent<VisionTrack>();
+            vt.Initialize(allMaterials, maze.owner.walker, level);
         }
+        /// <summary>
+        /// Adds a non-visual item (usually for walls between the cells of a bundle.
+        /// </summary>
+        /// <param name="x">X of the cell</param>
+        /// <param name="y">Y of the cell</param>
+        /// <param name="side">Side or direction of the wall</param>
         public void AddItem(int x, int y, int side = 0)
         {
             int i = side == 0 ? x + 1 : x;
             int j = side == 1 ? y + 1 : y;
             if (side % 2 == 0) noneV[i, j] = true;
             else noneH[i, j] = true;
-
         }
+        /// <summary>
+        /// Finds bundles on a level and populates <see cref="bundles"/> and <see cref="bundleLocalIndex"/>.
+        /// </summary>
         public void BundlesOnLevel()
         {
             List<CellBundle> bs = new List<CellBundle>();
@@ -167,15 +216,16 @@ namespace Resphinx.Maze
 
         }
         /// <summary>
-        /// Generates the vision map for a level
+        /// Generates the vision map of this level. It calls <see cref="VisionRayCast(MazeCell, bool, int)"/> or <see cref="VisionAround(MazeCell, bool, byte)"/> depending on <c>raycast</c> value.
         /// </summary>
+        /// <param name="raycast">If the <see cref="VisionMode"/> is RayCast</param>
+        /// <param name="growOffset">The maximum offset around the directly visible cells, see <see cref="MazeOwner.maxVisionOffset"/></param>
         public void Vision(bool raycast, byte growOffset = 0)
         {
             BundlesOnLevel();
             for (int j = 0; j < maze.rows; j++)
                 for (int i = 0; i < maze.cols; i++)
                 {
-                    VisionMap.currentCellIndex = j * maze.cols + i;
                     MazeCell mc = maze.cells[i, j, level];
                     bool vis = false;
                     if (mc.situation != BundleSituation.Hanging && mc.situation != BundleSituation.Void)
@@ -196,11 +246,14 @@ namespace Resphinx.Maze
                     VisibleBundleOnLevel(maze.cells[i, j, level]);
 
         }
-
         /// <summary>
-        /// The points on all sides from where rays are cast for vision mapping. 
+        /// Checks the visibility offset of a cell's floor from another cell. The offset of a cell floor is equal to the smallest offset of its non-opaque walls. Once a floor is given an offset, all elements to that cell are given the same offset, unless they have a lower offset. 
         /// </summary>
-
+        /// <param name="cell">The cell from which the visibility is mapped</param>
+        /// <param name="x">X of the floor's cell</param>
+        /// <param name="y">Y of the floor's cell</param>
+        /// <param name="transparency">Whether seethrough walls should be considered</param>
+        /// <returns></returns>
         byte FloorVisibility(MazeCell cell, int x, int y, bool transparency)
         {
             int index = transparency ? 1 : 0;
@@ -222,7 +275,10 @@ namespace Resphinx.Maze
             }
             return v;
         }
-
+        /// <summary>
+        /// Finds the visibility offset of the cell bundles from a cell and assigns the values to <see cref="MazeCell.bundleOffset"/>.
+        /// </summary>
+        /// <param name="cell"></param>
         void VisibleBundleOnLevel(MazeCell cell)
         {
             CellBundle b;
@@ -260,6 +316,12 @@ namespace Resphinx.Maze
                         }
                     }
         }
+        /// <summary>
+        /// Finds the offsets of all elements from a cell by casting rays from the edges of that cell. Everytime a ray hits a closed wall, its offset is increased. If the offset is equal to <c>maxOffset</c> (i.e. <see cref="MazeOwner.maxVisionOffset"/>), the ray stops. 
+        /// </summary>
+        /// <param name="cell">The source cell</param>
+        /// <param name="transparency">Whether seethrough walls are active</param>
+        /// <param name="maxOffset">The maximium visibility offset</param>
         void VisionRayCast(MazeCell cell, bool transparency, int maxOffset)
         {
             int index = transparency ? 1 : 0;
@@ -307,7 +369,12 @@ namespace Resphinx.Maze
                         }
 
         }
-
+        /// <summary>
+        /// Assigns visibility offsets of cells based on their minimum X or Y distance from the source cell. Cells with more distance than <c>maxOffset</c> are given the offset value of 255 or invisible.
+        /// </summary>
+        /// <param name="cell">The source cell</param>
+        /// <param name="transparency">Whether seethrough walls are active</param>
+        /// <param name="maxOffset">The maximium visibility offset</param>
         void VisionAround(MazeCell cell, bool transparency, byte maxOffset)
         {
             int index = transparency ? 1 : 0;
@@ -332,14 +399,26 @@ namespace Resphinx.Maze
             if (floor[cell.x, cell.y] >= 0) cell.offset[floor[cell.x, cell.y], index] = 0;
             //        for (int i = 0; i < alwaysVisible.Count; i++) if (alwaysVisible[i]) cell.offset[i, index] = 0;
         }
-        byte RayVisiblity(MazeCell cell, int i, int j, int[,] open, int[,] wall, int[,] see, byte ray, bool t)
+        /// <summary>
+        /// Extends a ray to hit the next cell edge (wall) on its path. Before calling this method, it should be clear whether the ray will hit a X-aligned or Y-aligned wall (so to pass the right array of walls).
+        /// </summary>
+        /// <param name="cell">The source cell</param>
+        /// <param name="i">The X of the wall</param>
+        /// <param name="j">The Y of the wall</param>
+        /// <param name="open">The list of open wall (either vertical or horizontal)</param>
+        /// <param name="wall">The list of closed wall (either vertical or horizontal)</param>
+        /// <param name="see">The list of seethrough wall (either vertical or horizontal)</param>
+        /// <param name="ray">The current ray's offset</param>
+        /// <param name="transparency">Whetehr to consider seethrough walls</param> 
+        /// <returns>If hits a closed wall returns <c>ray+1</c>, otherwise, returns <c>ray</c></returns>
+        byte RayVisiblity(MazeCell cell, int i, int j, int[,] open, int[,] wall, int[,] see, byte ray, bool transparency)
         {
             byte visibility;
-            int index = t ? 1 : 0;
+            int index = transparency ? 1 : 0;
             int k = -1;
             bool hitWall = false;
             if (open[i, j] >= 0) k = open[i, j];
-            else if (see[i, j] >= 0 && t) k = see[i, j];
+            else if (see[i, j] >= 0 && transparency) k = see[i, j];
             else if (wall[i, j] >= 0) { k = wall[i, j]; hitWall = true; }
             if (k >= 0)
             {
@@ -351,9 +430,19 @@ namespace Resphinx.Maze
                 ray++;
             return ray;
         }
+        /// <summary>
+        /// Sets the visibility offset of an element at a certain location to its corresponding index in a cell's <see cref="MazeCell.offset"/>. This is called three times: once for columns (the <c>open</c> array should be null) and other times for the X-aligning and Y0aligning walls repectively.
+        /// </summary>
+        /// <param name="cell">The cell</param>
+        /// <param name="i">X cordinate of the element</param>
+        /// <param name="j">Y coordinate of the element</param>
+        /// <param name="open">The list of open wall (either vertical or horizontal)</param>
+        /// <param name="wall">The list of closed wall (either vertical or horizontal)</param>
+        /// <param name="see">The list of seethrough wall (either vertical or horizontal)</param>
+        /// <param name="offset">The visibility offset</param>
+        /// <param name="index">0 for no-seethrough and 1 for seethrough active</param>
         void ShowItem(MazeCell cell, int i, int j, int[,] open, int[,] wall, int[,] see, byte offset, int index)
         {
-            byte vis;
             int w = -1;
             if (open == null) w = col[i, j];
             else if (open[i, j] >= 0) w = open[i, j];
@@ -361,6 +450,13 @@ namespace Resphinx.Maze
             else if (wall[i, j] >= 0) w = wall[i, j];
             if (w >= 0) cell.offset[w, index] = Min(cell.offset[w, index], offset);
         }
+        /// <summary>
+        /// Sets the visibility offset of all elements around a specified cell. This method calls <see cref="ShowItem"/>.
+        /// </summary>
+        /// <param name="cell"></param>
+        /// <param name="mc"></param>
+        /// <param name="offset"></param>
+        /// <param name="index"></param>
         void ShowCell(MazeCell cell, MazeCell mc, byte offset, int index)
         {
             for (int m = 0; m < 4; m++)
@@ -373,6 +469,18 @@ namespace Resphinx.Maze
             }
 
         }
+        /// <summary>
+        /// Casts a ray from a specific point on the edge of a cell to find the visibility offset of all the walls on its path. This method calls <see cref="RayVisiblity"/> based on whether it hits an X-aligned or Y-aligned wall.
+        /// </summary>
+        /// <param name="cell">The source cell</param>
+        /// <param name="x">The X the wall/edge where the ray originates</param>
+        /// <param name="y">The Y the wall/edge where the ray originates</param>
+        /// <param name="d">The side or direction of that wall</param>
+        /// <param name="p">The exact position of the ray's start</param>
+        /// <param name="ray">The ray's vector</param>
+        /// <param name="lastVis">The offset of the starting position (0 if the wall is open and 1 if closed)</param>
+        /// <param name="maxOffset">The maximum offset that the ray can travel (see <see cref="MazeOwner.maxVisionOffset"></see></param>
+        /// <param name="transparency">Whether seetrhough walls are active</param>
         void RayCast(MazeCell cell, int x, int y, int d, Vector2 p, Vector2 ray, byte lastVis, int maxOffset, bool transparency)
         {
             float lastM = 0.03f;
@@ -432,6 +540,12 @@ namespace Resphinx.Maze
                 }
             }
         }
+        /// <summary>
+        /// Sets the visibility of all elements visible from a cell. This is only called for cells in a bundle which is visible from another cell. This method either hides or shows elements, but not both as <see cref="Apply(MazeCell, byte, bool)"/> does.
+        /// </summary>
+        /// <param name="cell">The cell (not the original cell)</param>
+        /// <param name="show">Whether to show or hides.</param>
+        /// <param name="offset">The offset upto which elements should be visible</param>
         public void Show(MazeCell cell, bool show, byte offset = 0)
         {
             bool active;
@@ -445,7 +559,12 @@ namespace Resphinx.Maze
                     if (show == active && lastState[i] != active) { all[i].SetActive(active); lastState[i] = active; if (!active) hid++; }
                 }
         }
-
+        /// <summary>
+        /// Sets the visibility of elements from a cell. It only changes the visibility of elements if it is different from their current status.
+        /// </summary>
+        /// <param name="cell">The source cell</param>
+        /// <param name="offset">The current visible offset</param>
+        /// <param name="considerLevel">If this is true, it also checks for the vsisble bundles and sets the visibilty of all elements from those bundled cells. </param>
         public void Apply(MazeCell cell, byte offset, bool considerLevel = true)
         {
             string s = cell.ijk.ToString();
@@ -466,34 +585,15 @@ namespace Resphinx.Maze
                 if (considerLevel)
                     ApplyOnBundles(cell, offset);
                 if (considerLevel) maze.vision.SetAlwaysVisible(level);
-            }
-        }
 
-        public void ShowAll(List<MazeCell> cell, int startIndex, int endIndex, byte offset = 0)
-        {
-            for (int i = 0; i < all.Count; i++)
-            {
-                bool active = false;
-                byte v;
-                for (int j = startIndex; j <= endIndex; j++)
-                {
-                    v = cell[j].offset[i, maze.transparency ? 0 : 1];
-                    if (v <= offset) { active = true; break; }
-                }
-                if (active && !lastState[i]) { all[i].SetActive(active); lastState[i] = active; }
             }
         }
-        public void ApplyAll(List<MazeCell> cells, int mainCount, byte offsetMain, byte otherOffsets)
-        {
-            int startIndex = 1, endIndex = Mathf.Min(cells.Count - 1, mainCount - 1);
-            if (cells.Count > 0)
-            {
-                Apply(cells[0], offsetMain);
-                if (endIndex > 0) ShowAll(cells, startIndex, endIndex, otherOffsets);
-            }
-            if (cells.Count > endIndex + 1)
-                ShowAll(cells, endIndex + 1, cells.Count - 1, otherOffsets);
-        }
+        /// <summary>
+        /// This is used to update visibilities when the transparency (seethrough) is changed to inactive. The method is also called within itself but only if <c>considerLevel</c> is true.
+        /// </summary>
+        /// <param name="cell">The source cell</param>
+        /// <param name="offset">The current visibility offset</param>
+        /// <param name="considerLevel">Changing visibilities in other levels.</param>
         public void RemoveTransparency(MazeCell cell, byte offset = 0, bool considerLevel = true)
         {
             for (int i = 0; i < all.Count; i++)
@@ -510,7 +610,11 @@ namespace Resphinx.Maze
             }
             if (considerLevel && cell.bundle.index >= 0) RemoveTransparency(cell, offset, false);
         }
-
+        /// <summary>
+        /// Applies the visibility offset of the current cell on bundles visible from it. This method calls <see cref="CellBundle.Show(MazeMap, int, byte, bool)"/> and <see cref="CellBundle.Apply(MazeMap, int, byte, bool)"/>.
+        /// </summary>
+        /// <param name="cell">The current source cell</param>
+        /// <param name="offset">The current visibility offset</param>
         void ApplyOnBundles(MazeCell cell, byte offset)
         {
             int t = maze.transparency ? 1 : 0;
@@ -518,17 +622,17 @@ namespace Resphinx.Maze
             levelVisibility[level] = true;
             bool[] bundleVisibility = new bool[bundles.Length];
             int z;
-             for (int i = 0; i < bundles.Length; i++)
+            for (int i = 0; i < bundles.Length; i++)
             {
-                  if (cell.bundleOffset[i, t] <= offset)
+                if (cell.bundleOffset[i, t] <= offset)
                 {
                     z = bundles[i].levels[0] == level ? bundles[i].levels[1] : bundles[i].levels[0];
-                      if (levelVisibility[z])
+                    if (levelVisibility[z])
                         bundles[i].Show(maze, z, offset, maze.transparency);
                     else
                     {
                         levelVisibility[z] = true;
-                          if (!bundleVisibility[i])
+                        if (!bundleVisibility[i])
                         {
                             bundles[i].Apply(maze, z, offset, maze.transparency);
                             bundleVisibility[i] = true;
@@ -539,26 +643,46 @@ namespace Resphinx.Maze
             for (int i = 0; i < maze.levelRoot.Length; i++)
                 if (maze.vision.levels[i].levelActive != levelVisibility[i])
                 {
-                      maze.levelRoot[i].SetActive(levelVisibility[i]);
+                    maze.levelRoot[i].SetActive(levelVisibility[i]);
                     maze.vision.levels[i].levelActive = levelVisibility[i];
                 }
         }
     }
+    /// <summary>
+    /// This class is responsible for creating vision maps for the entire maze. It contains <see cref="LevelVision"/> instances for levels which contain the vision maps for each level.
+    /// </summary>
     public class VisionMap
     {
-        public const int Floor = 1;
-        public const int Column = 2;
-        public const int Open = 3;
-        public const int Transparent = 4;
-        public const int Opaque = 5;
-
+        /// <summary>
+        /// The corresponding maze
+        /// </summary>
         public MazeMap maze;
-        public List<VisiblePair> alwaysVisible = new List<VisiblePair>();
+        /// <summary>
+        /// List of clones of elements that should always be visible. There is a clone for each level. The clone system is considered due to maintaining the visibilty of the element even if the level of its original element is hidden.
+        /// </summary>
+        public List<VisibleClones> alwaysVisible = new List<VisibleClones>();
+        /// <summary>
+        /// List of all structural elements created in the maze. This is used primarily to destroy these objects in <see cref="MazeMap.DestroyEverything"/>.
+        /// </summary>
         public List<GameObject> grid = new List<GameObject>();
+        /// <summary>
+        /// List of all non-structural elements created in the maze. This is used primarily to destroy these objects in <see cref="MazeMap.DestroyEverything"/>.
+        /// </summary>
         public List<GameObject> others = new List<GameObject>();
+        /// <summary>
+        /// The vision maps for individual levels.
+        /// </summary>
         public LevelVision[] levels;
-        public static int currentCalculatedLevel = 0, currentCellIndex = 0;
+
+        //     public static int currentCalculatedLevel = 0, currentCellIndex = 0;
+        /// <summary>
+        /// If the vision is being calculated.
+        /// </summary>
         public bool calculating;
+        /// <summary>
+        /// Creates empty vision map and its level vision maps. The calculation does not start here but with <see cref="Calculate(bool, byte)"/>
+        /// </summary>
+        /// <param name="m">The subjected maze</param>
         public VisionMap(MazeMap m)
         {
             maze = m;
@@ -566,60 +690,71 @@ namespace Resphinx.Maze
             for (int i = 0; i < levels.Length; i++)
                 levels[i] = new LevelVision(m, i);
         }
+        /// <summary>
+        /// Add an element to a level map vision. See <see cref="LevelVision.AddItem(GameObject, int, int, VisionItemType, int)"/> for the parameters.
+        /// </summary>
+        /// <param name="g">See above</param>
+        /// <param name="i">See above</param>
+        /// <param name="j">See above</param>
+        /// <param name="k">The level index</param>
+        /// <param name="type">See above</param>
+        /// <param name="d">See above</param>
         public void AddItem(GameObject g, int i, int j, int k, VisionItemType type, int d = 0)
         {
             levels[k].AddItem(g, i, j, type, d);
             grid.Add(g);
         }
+        /// <summary>
+        /// Add a non-visual element to a level map vision. See <see cref="LevelVision.AddItem(int, int, int)"/> for the parameters.
+        /// </summary>
+        /// <param name="i">See above</param>
+        /// <param name="j">See above</param>
+        /// <param name="k">The level index</param>
+        /// <param name="d">See above</param>
         public void AddItem(int i, int j, int k, int d = 0)
         {
             levels[k].AddItem(i, j, d);
         }
+        /// <summary>
+        /// Adds a non vision-related item to the maze.
+        /// </summary>
+        /// <param name="g"></param>
         public void AddItem(GameObject g)
         {
             others.Add(g);
         }
+        /// <summary>
+        /// Sets the current visibility state of gameobjects in all levels. This sets individual <see cref="LevelVision.lastState"/>s of objects.
+        /// </summary>
         public void SetLastStates()
         {
             for (int k = 0; k < maze.levels; k++)
             {
                 levels[k].lastState = new bool[levels[k].all.Count];
                 for (int i = 0; i < levels[k].all.Count; i++)
-                {
                     levels[k].lastState[i] = levels[k].all[i].activeSelf;
-                }
             }
         }
-        public async void VisionAsync(bool rayCast, byte growOffset = 0)
-        {
-            Debug.Log("calculating in vision");
-            await Task.Run(() =>
-            {
-                lock (maze)
-                {
-                    for (int k = 0; k < maze.levels; k++)
-                    {
-                        currentCalculatedLevel = k;
-                        levels[k].Vision(rayCast, growOffset);
-                    }
-                    calculating = false;
-                    Debug.Log("calculation op finished");
-                }
-            });
-        }
-        public void Vision(bool rayCast, byte growOffset = 0)
+        /// <summary>
+        /// Calculate the vision maps for the parent maze
+        /// </summary>
+        /// <param name="rayCast">Whether the <see cref="MazeOwner.visionOffsetMode"/> is set to <see cref="VisionMode.RayCast"/>/></param>
+        /// <param name="growOffset">The maximum visibility offset set by <see cref="MazeOwner.maxVisionOffset"/></param>
+        public void Calculate(bool rayCast, byte growOffset = 0)
         {
             lock (maze)
             {
                 for (int k = 0; k < maze.levels; k++)
                 {
-                    currentCalculatedLevel = k;
                     levels[k].Vision(rayCast, growOffset);
                 }
                 calculating = false;
                 Debug.Log("calculation op finished");
             }
         }
+        /// <summary>
+        /// Hides all the elements in the maze. 
+        /// </summary>
         public void HideAll()
         {
             for (int i = 0; i < levels.Length; i++)
@@ -629,13 +764,23 @@ namespace Resphinx.Maze
                     levels[i].lastState[i] = false;
                 }
         }
+        /// <summary>
+        /// Adds a clone of a game object that should always be active.
+        /// </summary>
+        /// <param name="g">The source game object</param>
+        /// <param name="l0">The game object's original level</param>
+        /// <param name="l1">The level for the instantiated clone</param>
         public void AddAlwaysVisible(GameObject g, int l0, int l1)
         {
-            alwaysVisible.Add(new VisiblePair(maze.root, g, l0, l1));
+            alwaysVisible.Add(new VisibleClones(maze.root, g, l0, l1));
         }
+        /// <summary>
+        /// Sets the active level for all <see cref="alwaysVisible"/> objects. This calls <see cref="VisibleClones.SetLevel(int)"/> to make sure the right cloned object is active in each level.
+        /// </summary>
+        /// <param name="l"></param>
         public void SetAlwaysVisible(int l)
         {
-            foreach (VisiblePair vp in alwaysVisible)
+            foreach (VisibleClones vp in alwaysVisible)
                 vp.SetLevel(l);
         }
     }
